@@ -320,25 +320,42 @@ async function eliminarRegistro(id) {
     }
 }
 
-// 10. Helper para convertir imagen URL a Data URI (Base64)
-function urlABase64(url) {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = "Anonymous";
-        img.src = url;
-        img.onload = () => {
-            const canvas = document.createElement("canvas");
-            canvas.width = 120; // Tamaño optimizado para la celda de Excel
-            canvas.height = 90;
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(img, 0, 0, 120, 90);
-            resolve(canvas.toDataURL("image/jpeg", 0.8));
-        };
-        img.onerror = () => resolve(null); // Si falla o es video, retorna null
-    });
+// 10. Helper robusto para procesar imágenes de Firebase a Base64
+async function urlABase64(url) {
+    try {
+        const respuesta = await fetch(url);
+        if (!respuesta.ok) return null;
+
+        const blob = await respuesta.blob();
+
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.src = URL.createObjectURL(blob);
+
+            img.onload = () => {
+                const canvas = document.createElement("canvas");
+                canvas.width = 120;
+                canvas.height = 90;
+                
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0, 120, 90);
+
+                URL.revokeObjectURL(img.src);
+                resolve(canvas.toDataURL("image/jpeg", 0.8));
+            };
+
+            img.onerror = () => {
+                URL.revokeObjectURL(img.src);
+                resolve(null);
+            };
+        });
+    } catch (error) {
+        console.warn("No se pudo obtener la imagen:", error);
+        return null;
+    }
 }
 
-// 11. Exportación a Excel con Imágenes Incrustadas
+// 11. Exportación a Excel con Imágenes Compatibles
 async function exportarAExcelConImagenes() {
     if (historialCompleto.length === 0) {
         alert("No hay información suficiente para exportar.");
@@ -360,26 +377,28 @@ async function exportarAExcelConImagenes() {
                 if (item.mediaTipo === "video") {
                     celdaEvidencia = `<a href="${item.mediaUrl}" target="_blank">Ver Video</a>`;
                 } else {
-                    // Convertir imagen de Firebase a Base64
+                    // Intenta obtener Base64 mediante Blob de fetch
                     const base64Img = await urlABase64(item.mediaUrl);
+                    
                     if (base64Img) {
-                        celdaEvidencia = `<img src="${base64Img}" width="120" height="90"/>`;
+                        celdaEvidencia = `<img src="${base64Img}" width="120" height="90" style="display:block; margin:auto;" />`;
                     } else {
-                        celdaEvidencia = `<a href="${item.mediaUrl}" target="_blank">Ver Foto</a>`;
+                        // Resguardo en caso de que falle la descarga: renderizado por URL directa
+                        celdaEvidencia = `<img src="${item.mediaUrl}" width="120" height="90" style="display:block; margin:auto;" /><br><a href="${item.mediaUrl}" target="_blank">Ver Enlace</a>`;
                     }
                 }
             }
 
             filasHTML += `
-                <tr>
-                    <td style="vertical-align: middle;">${item.fecha}</td>
-                    <td style="vertical-align: middle;">${item.hora}</td>
-                    <td style="vertical-align: middle;">${maquinasTxt}</td>
-                    <td style="vertical-align: middle;">${item.ruta}</td>
-                    <td style="vertical-align: middle;">${item.conductor}</td>
-                    <td style="vertical-align: middle;">${item.pasajerosSinPagar}</td>
-                    <td style="vertical-align: middle;">${item.lugar}</td>
-                    <td style="vertical-align: middle;">${item.descripcion}</td>
+                <tr style="height: 95px;">
+                    <td style="vertical-align: middle; text-align: center;">${item.fecha || ''}</td>
+                    <td style="vertical-align: middle; text-align: center;">${item.hora || ''}</td>
+                    <td style="vertical-align: middle; text-align: center;">${maquinasTxt || ''}</td>
+                    <td style="vertical-align: middle; text-align: center;">${item.ruta || ''}</td>
+                    <td style="vertical-align: middle; text-align: center;">${item.conductor || ''}</td>
+                    <td style="vertical-align: middle; text-align: center;">${item.pasajerosSinPagar ?? 0}</td>
+                    <td style="vertical-align: middle; text-align: center;">${item.lugar || ''}</td>
+                    <td style="vertical-align: middle; text-align: left;">${item.descripcion || ''}</td>
                     <td style="text-align: center; vertical-align: middle;">${celdaEvidencia}</td>
                 </tr>
             `;
@@ -401,13 +420,18 @@ async function exportarAExcelConImagenes() {
                     </x:ExcelWorkbook>
                 </xml>
                 <![endif]-->
+                <style>
+                    table { border-collapse: collapse; width: 100%; }
+                    th { background-color: #003366; color: white; border: 1px solid #000; padding: 8px; font-weight: bold; }
+                    td { border: 1px solid #ccc; padding: 5px; }
+                </style>
             </head>
             <body>
                 <h2>Reporte de Anomalías Operativas - Buses Tarapacá</h2>
                 <p><strong>Fecha de Generación:</strong> ${new Date().toLocaleString()}</p>
-                <table border="1" style="border-collapse: collapse;">
+                <table border="1">
                     <thead>
-                        <tr style="background-color: #003366; color: white;">
+                        <tr>
                             <th>Fecha</th>
                             <th>Hora</th>
                             <th>Máquina(s)</th>
@@ -416,7 +440,7 @@ async function exportarAExcelConImagenes() {
                             <th>Pasajeros Sin Pagar</th>
                             <th>Lugar / Parada</th>
                             <th>Descripción</th>
-                            <th>Evidencia Fotográfica</th>
+                            <th style="width: 130px;">Evidencia Fotográfica</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -427,7 +451,7 @@ async function exportarAExcelConImagenes() {
             </html>
         `;
 
-        const blob = new Blob([excelHTML], { type: "application/vnd.ms-excel;charset=utf-8" });
+        const blob = new Blob(['\ufeff' + excelHTML], { type: "application/vnd.ms-excel;charset=utf-8" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -435,6 +459,7 @@ async function exportarAExcelConImagenes() {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        URL.revokeObjectURL(url);
 
     } catch (err) {
         console.error("Error al exportar:", err);
