@@ -15,16 +15,14 @@ const firebaseConfig = {
     appId: "1:834195156689:web:3e271a39626e2e2a0fef19"
 };
 
-// Inicializar Firebase con sintaxis explícita
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app, "(default)");
+const db = getFirestore(app);
 const storage = getStorage(app);
 
 // Estado local
 let maquinasSeleccionadas = [];
 let historialCompleto = [];
 
-// Lista predefinida de máquinas de Buses Tarapacá
 const MAQUINAS_DISPONIBLES = Array.from({ length: 40 }, (_, i) => `Bus ${101 + i}`);
 
 // 2. Inicialización del DOM y Eventos
@@ -34,13 +32,12 @@ document.addEventListener("DOMContentLoaded", () => {
     registrarServiceWorker();
 
     document.getElementById("anomaliaForm").addEventListener("submit", manejarEnvioFormulario);
-    document.getElementById("btnExportar").addEventListener("click", exportarAExcel);
+    document.getElementById("btnExportar").addEventListener("click", exportarAExcelConImagenes);
     document.getElementById("filterRango").addEventListener("change", aplicarFiltros);
     document.getElementById("filterFechaEspecifica").addEventListener("change", aplicarFiltros);
     document.getElementById("filterBus").addEventListener("change", aplicarFiltros);
     document.getElementById("btnLimpiar").addEventListener("click", limpiarFiltros);
 
-    // Establecer fecha y hora actual por defecto
     const hoy = new Date();
     document.getElementById("fechaInput").value = hoy.toISOString().split("T")[0];
     document.getElementById("horaInput").value = hoy.toTimeString().slice(0, 5);
@@ -55,7 +52,6 @@ function renderizarChipsMaquinas() {
     selectFiltro.innerHTML = '<option value="todos">Todas las máquinas</option>';
 
     MAQUINAS_DISPONIBLES.forEach(bus => {
-        // Generar Chip para el formulario
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "chip-btn";
@@ -70,7 +66,6 @@ function renderizarChipsMaquinas() {
         });
         container.appendChild(btn);
 
-        // Llenar select de filtro
         const option = document.createElement("option");
         option.value = bus;
         option.textContent = bus;
@@ -78,11 +73,11 @@ function renderizarChipsMaquinas() {
     });
 }
 
-// 3. Procesamiento y Compresión de Imágenes (Canvas)
+// 3. Compresión de Imágenes
 function optimizarImagen(file) {
     return new Promise((resolve) => {
         if (!file.type.startsWith("image/")) {
-            resolve(file); // Si es video, pasa sin comprimir
+            resolve(file);
             return;
         }
 
@@ -164,7 +159,6 @@ async function manejarEnvioFormulario(e) {
         return;
     }
 
-    // Límite de video a 20MB
     const file = mediaInput.files[0];
     if (file.type.startsWith("video/") && file.size > 20 * 1024 * 1024) {
         alert("El archivo de video supera el límite permitido de 20MB.");
@@ -200,7 +194,6 @@ async function manejarEnvioFormulario(e) {
         statusMsg.style.color = "green";
         statusMsg.textContent = "✅ ¡Anomalía registrada exitosamente!";
         
-        // Limpiar Formulario
         document.getElementById("anomaliaForm").reset();
         maquinasSeleccionadas = [];
         document.querySelectorAll(".chip-btn.selected").forEach(c => c.classList.remove("selected"));
@@ -232,7 +225,7 @@ function escucharHistorialEnTiempoReal() {
     });
 }
 
-// 7. Filtrado Dinámico de Datos
+// 7. Filtrado Dinámico
 function aplicarFiltros() {
     const rango = document.getElementById("filterRango").value;
     const fechaEsp = document.getElementById("filterFechaEspecifica").value;
@@ -276,7 +269,7 @@ function limpiarFiltros() {
     renderizarTabla(historialCompleto);
 }
 
-// 8. Renderizado de Tabla
+// 8. Renderizado de Tabla Web
 function renderizarTabla(lista) {
     const tbody = document.getElementById("cuerpoTabla");
     const totalBadge = document.getElementById("totalResultados");
@@ -291,7 +284,6 @@ function renderizarTabla(lista) {
 
     lista.forEach(item => {
         const tr = document.createElement("tr");
-
         const maquinasTxt = Array.isArray(item.maquinas) ? item.maquinas.join(", ") : item.maquinas;
         const evidenciaHTML = item.mediaTipo === "video" 
             ? `<video src="${item.mediaUrl}" class="media-preview" controls></video>`
@@ -317,7 +309,7 @@ function renderizarTabla(lista) {
     });
 }
 
-// 9. Borrar Registro
+// 9. Eliminar Registro
 async function eliminarRegistro(id) {
     if (confirm("¿Está seguro de que desea eliminar este reporte de la nube?")) {
         try {
@@ -328,90 +320,132 @@ async function eliminarRegistro(id) {
     }
 }
 
-// 10. Exportación Limpia a Excel (Sin imágenes rotas)
-function exportarAExcel() {
-    const rango = document.getElementById("filterRango").value;
-    const bus = document.getElementById("filterBus").value;
-    
-    // Obtener los datos filtrados actualmente reflejados en la tabla
-    const filas = Array.from(document.querySelectorAll("#cuerpoTabla tr"));
-    if (filas.length === 0 || filas[0].cells.length < 5) {
+// 10. Helper para convertir imagen URL a Data URI (Base64)
+function urlABase64(url) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = "Anonymous";
+        img.src = url;
+        img.onload = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = 120; // Tamaño optimizado para la celda de Excel
+            canvas.height = 90;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, 120, 90);
+            resolve(canvas.toDataURL("image/jpeg", 0.8));
+        };
+        img.onerror = () => resolve(null); // Si falla o es video, retorna null
+    });
+}
+
+// 11. Exportación a Excel con Imágenes Incrustadas
+async function exportarAExcelConImagenes() {
+    if (historialCompleto.length === 0) {
         alert("No hay información suficiente para exportar.");
         return;
     }
 
-    let excelHTML = `
-        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-        <head>
-            <meta charset="utf-8">
-            <!--[if gte mso 9]>
-            <xml>
-                <x:ExcelWorkbook>
-                    <x:ExcelWorksheets>
-                        <x:ExcelWorksheet>
-                            <x:Name>Anomalías Buses Tarapacá</x:Name>
-                            <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
-                        </x:ExcelWorksheet>
-                    </x:ExcelWorksheets>
-                </x:ExcelWorkbook>
-            </xml>
-            <![endif]-->
-        </head>
-        <body>
-            <h2>Reporte de Anomalías Operativas - Buses Tarapacá</h2>
-            <p><strong>Fecha de Generación:</strong> ${new Date().toLocaleString()}</p>
-            <table border="1" style="border-collapse: collapse;">
-                <thead>
-                    <tr style="background-color: #003366; color: white;">
-                        <th>Fecha</th>
-                        <th>Hora</th>
-                        <th>Máquina(s)</th>
-                        <th>Ruta Principal</th>
-                        <th>Conductor</th>
-                        <th>Pasajeros Sin Pagar</th>
-                        <th>Lugar / Parada</th>
-                        <th>Descripción</th>
-                        <th>Enlace de Evidencia</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
+    const btnExportar = document.getElementById("btnExportar");
+    btnExportar.disabled = true;
+    btnExportar.textContent = "Generando Excel con fotos...";
 
-    historialCompleto.forEach(item => {
-        const maquinasTxt = Array.isArray(item.maquinas) ? item.maquinas.join(", ") : item.maquinas;
-        excelHTML += `
-            <tr>
-                <td>${item.fecha}</td>
-                <td>${item.hora}</td>
-                <td>${maquinasTxt}</td>
-                <td>${item.ruta}</td>
-                <td>${item.conductor}</td>
-                <td>${item.pasajerosSinPagar}</td>
-                <td>${item.lugar}</td>
-                <td>${item.descripcion}</td>
-                <td><a href="${item.mediaUrl}" target="_blank">Ver Evidencia en Línea</a></td>
-            </tr>
+    try {
+        let filasHTML = "";
+
+        for (const item of historialCompleto) {
+            const maquinasTxt = Array.isArray(item.maquinas) ? item.maquinas.join(", ") : item.maquinas;
+            let celdaEvidencia = "Sin archivo";
+
+            if (item.mediaUrl) {
+                if (item.mediaTipo === "video") {
+                    celdaEvidencia = `<a href="${item.mediaUrl}" target="_blank">Ver Video</a>`;
+                } else {
+                    // Convertir imagen de Firebase a Base64
+                    const base64Img = await urlABase64(item.mediaUrl);
+                    if (base64Img) {
+                        celdaEvidencia = `<img src="${base64Img}" width="120" height="90"/>`;
+                    } else {
+                        celdaEvidencia = `<a href="${item.mediaUrl}" target="_blank">Ver Foto</a>`;
+                    }
+                }
+            }
+
+            filasHTML += `
+                <tr>
+                    <td style="vertical-align: middle;">${item.fecha}</td>
+                    <td style="vertical-align: middle;">${item.hora}</td>
+                    <td style="vertical-align: middle;">${maquinasTxt}</td>
+                    <td style="vertical-align: middle;">${item.ruta}</td>
+                    <td style="vertical-align: middle;">${item.conductor}</td>
+                    <td style="vertical-align: middle;">${item.pasajerosSinPagar}</td>
+                    <td style="vertical-align: middle;">${item.lugar}</td>
+                    <td style="vertical-align: middle;">${item.descripcion}</td>
+                    <td style="text-align: center; vertical-align: middle;">${celdaEvidencia}</td>
+                </tr>
+            `;
+        }
+
+        const excelHTML = `
+            <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+            <head>
+                <meta charset="utf-8">
+                <!--[if gte mso 9]>
+                <xml>
+                    <x:ExcelWorkbook>
+                        <x:ExcelWorksheets>
+                            <x:ExcelWorksheet>
+                                <x:Name>Anomalías Buses Tarapacá</x:Name>
+                                <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+                            </x:ExcelWorksheet>
+                        </x:ExcelWorksheets>
+                    </x:ExcelWorkbook>
+                </xml>
+                <![endif]-->
+            </head>
+            <body>
+                <h2>Reporte de Anomalías Operativas - Buses Tarapacá</h2>
+                <p><strong>Fecha de Generación:</strong> ${new Date().toLocaleString()}</p>
+                <table border="1" style="border-collapse: collapse;">
+                    <thead>
+                        <tr style="background-color: #003366; color: white;">
+                            <th>Fecha</th>
+                            <th>Hora</th>
+                            <th>Máquina(s)</th>
+                            <th>Ruta Principal</th>
+                            <th>Conductor</th>
+                            <th>Pasajeros Sin Pagar</th>
+                            <th>Lugar / Parada</th>
+                            <th>Descripción</th>
+                            <th>Evidencia Fotográfica</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filasHTML}
+                    </tbody>
+                </table>
+            </body>
+            </html>
         `;
-    });
 
-    excelHTML += `
-                </tbody>
-            </table>
-        </body>
-        </html>
-    `;
+        const blob = new Blob([excelHTML], { type: "application/vnd.ms-excel;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `Reporte_Anomalias_Tarapaca_${new Date().toISOString().split("T")[0]}.xls`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
 
-    const blob = new Blob([excelHTML], { type: "application/vnd.ms-excel;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Reporte_Anomalias_Tarapaca_${new Date().toISOString().split("T")[0]}.xls`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    } catch (err) {
+        console.error("Error al exportar:", err);
+        alert("Ocurrió un error al procesar las imágenes para Excel.");
+    } finally {
+        btnExportar.disabled = false;
+        btnExportar.textContent = "Exportar a Excel";
+    }
 }
 
-// 11. Registro del Service Worker para PWA
+// 12. Service Worker
 function registrarServiceWorker() {
     if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("./sw.js")
