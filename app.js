@@ -7,9 +7,9 @@ import {
     getStorage, ref, uploadBytes, getDownloadURL, deleteObject 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
-// 1. Configuración de Firebase (registro-6bd00)
+// 1. Configuración de Firebase vinculada a tu proyecto registro-6bd00
 const firebaseConfig = {
-    apiKey: "AIzaSyDummyKey_ReplaceIfRequired",
+    apiKey: "TU_API_KEY_REAL_AQUI", // Coloca tu API Key de Firebase (ej: AIzaSy...)
     authDomain: "registro-6bd00.firebaseapp.com",
     projectId: "registro-6bd00",
     storageBucket: "registro-6bd00.firebasestorage.app",
@@ -22,11 +22,11 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// Lista de Máquinas disponibles
+// Lista exacta de Máquinas / Equipos
 const LISTA_MAQUINAS = [
-    "Maq 01", "Maq 02", "Maq 03", "Maq 04", "Maq 05",
-    "Maq 06", "Maq 07", "Maq 08", "Maq 09", "Maq 10",
-    "Maq 11", "Maq 12", "Maq 15", "Maq 18", "Maq 20"
+    "122", "127", "120", "202", "123", "125", "121", 
+    "201", "200", "129", "119", "116", "124", "130", 
+    "113", "115", "203", "114", "128", "117", "126"
 ];
 
 // Variables globales de estado
@@ -70,18 +70,18 @@ function renderizarChipsMaquinas() {
     filterBus.innerHTML = '<option value="todos">Todas las máquinas</option>';
 
     LISTA_MAQUINAS.forEach(maq => {
-        // Opción para el formulario
+        // Botón para formulario
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'chip-btn';
-        btn.innerText = maq;
+        btn.innerText = `Máquina ${maq}`;
         btn.addEventListener('click', () => toggleSeleccionMaquina(maq, btn));
         maquinasContainer.appendChild(btn);
 
-        // Opción para el filtro
+        // Opción para filtro
         const opt = document.createElement('option');
         opt.value = maq;
-        opt.innerText = maq;
+        opt.innerText = `Máquina ${maq}`;
         filterBus.appendChild(opt);
     });
 }
@@ -116,7 +116,7 @@ anomaliaForm.addEventListener('submit', async (e) => {
     statusMsg.innerText = "⏳ Subiendo evidencia a la nube...";
 
     try {
-        // 1. Subir archivo a Firebase Storage
+        // Subir archivo a Firebase Storage
         const fileExt = mediaFile.name.split('.').pop();
         const fileName = `evidencias/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const storageRef = ref(storage, fileName);
@@ -125,7 +125,7 @@ anomaliaForm.addEventListener('submit', async (e) => {
         const mediaUrl = await getDownloadURL(storageRef);
         const isVideo = mediaFile.type.startsWith('video');
 
-        // 2. Crear documento en Firestore
+        // Guardar documento en Firestore
         const nuevoRegistro = {
             maquinas: [...maquinasSeleccionadas],
             ruta: document.getElementById('rutaInput').value.trim(),
@@ -201,16 +201,14 @@ function configurarFiltros() {
     });
 }
 
-// Aplicar filtros a los registros cargados
+// Aplicar filtros
 function aplicarFiltros() {
     let resultados = [...todosLosRegistros];
 
-    // Filtro por fecha específica
     const fechaEsp = filterFechaEspecifica.value;
     if (fechaEsp) {
         resultados = resultados.filter(r => r.fecha === fechaEsp);
     } else {
-        // Filtro por rango
         const rango = filterRango.value;
         const hoy = new Date();
         
@@ -222,7 +220,7 @@ function aplicarFiltros() {
             haceSieteDias.setDate(hoy.getDate() - 7);
             resultados = resultados.filter(r => new Date(r.fecha) >= haceSieteDias);
         } else if (rango === 'mes') {
-            const mesActual = hoy.toISOString().slice(0, 7); // YYYY-MM
+            const mesActual = hoy.toISOString().slice(0, 7);
             resultados = resultados.filter(r => r.fecha && r.fecha.startsWith(mesActual));
         } else if (rango === 'anio') {
             const anioActual = hoy.getFullYear().toString();
@@ -230,7 +228,6 @@ function aplicarFiltros() {
         }
     }
 
-    // Filtro por Máquina
     const maqFiltro = filterBus.value;
     if (maqFiltro !== 'todos') {
         resultados = resultados.filter(r => {
@@ -246,7 +243,7 @@ function aplicarFiltros() {
     renderizarTabla(resultados);
 }
 
-// Renderizado de datos en la tabla HTML
+// Renderizar Tabla HTML
 function renderizarTabla(registros) {
     cuerpoTabla.innerHTML = '';
 
@@ -259,8 +256,8 @@ function renderizarTabla(registros) {
         const tr = document.createElement('tr');
 
         const maquinasTexto = Array.isArray(item.maquinas) 
-            ? item.maquinas.join(', ') 
-            : (item.maquina || 'N/R');
+            ? item.maquinas.map(m => `Maq ${m}`).join(', ') 
+            : `Maq ${item.maquina || 'N/R'}`;
 
         let mediaHtml = 'Sin evidencia';
         if (item.mediaUrl) {
@@ -288,7 +285,6 @@ function renderizarTabla(registros) {
             </td>
         `;
 
-        // Evento de eliminación
         const btnEliminar = tr.querySelector('.btn-danger');
         btnEliminar.addEventListener('click', () => eliminarRegistro(item));
 
@@ -296,7 +292,7 @@ function renderizarTabla(registros) {
     });
 }
 
-// Eliminar Registro de Firestore y Storage
+// Eliminar Registro
 async function eliminarRegistro(item) {
     if (!confirm("¿Está seguro de que desea eliminar este registro y su archivo de evidencia?")) return;
 
@@ -312,25 +308,22 @@ async function eliminarRegistro(item) {
     }
 }
 
-
 /* ==========================================================================
-   EXPORTACIÓN A EXCEL COMPATIBLE CON PC (TODAS LAS VERSIONES) E IPHONE (iOS)
-   1. Descarga la imagen y redimensiona a máximo 600px de ancho.
-   2. Convierte la imagen a un PNG ligero universal usando HTML5 Canvas.
-   3. Evita pantallas negras en iPhone y celdas transparentes en Excel antiguo.
+   MÓDULO DE EXPORTACIÓN A EXCEL (COMPATIBLE CON PC, iOS, ANDROID Y OFFICE 365)
    ========================================================================== */
 
+// Función universal para procesar imágenes como PNG estándar
 async function descargarEIncrustarImagen(url) {
     return new Promise((resolve) => {
         const img = new Image();
-        img.crossOrigin = "Anonymous"; // Permite lectura CORS desde Firebase
+        img.crossOrigin = "Anonymous";
         img.src = url;
 
         img.onload = () => {
             try {
                 const canvas = document.createElement("canvas");
                 
-                // Reducir la resolución a un máximo de 600px para mantener el Excel ligero (ideal para iPhone)
+                // Limitar tamaño máximo a 600px para que abra rápido en celulares y no consuma RAM excesiva
                 const MAX_WIDTH = 600;
                 let width = img.naturalWidth || img.width;
                 let height = img.naturalHeight || img.height;
@@ -346,10 +339,9 @@ async function descargarEIncrustarImagen(url) {
                 const ctx = canvas.getContext("2d");
                 ctx.drawImage(img, 0, 0, width, height);
 
-                // Convertir Canvas a Data URL en formato PNG estandarizado
+                // Exportar como PNG estándar
                 const dataURL = canvas.toDataURL("image/png");
 
-                // Convertir DataURL Base64 a ArrayBuffer para la librería ExcelJS
                 const base64Data = dataURL.split(',')[1];
                 const binaryString = window.atob(base64Data);
                 const len = binaryString.length;
@@ -359,19 +351,19 @@ async function descargarEIncrustarImagen(url) {
                 }
                 resolve(bytes.buffer);
             } catch (err) {
-                console.error("Error procesando imagen para el Excel:", err);
+                console.error("Error procesando imagen para Excel:", err);
                 resolve(null);
             }
         };
 
         img.onerror = (err) => {
-            console.error("Error de carga de la imagen desde URL:", err);
-            resolve(null); // Si falla la carga, continua el reporte sin la imagen
+            console.error("Error al cargar la URL de la imagen:", err);
+            resolve(null);
         };
     });
 }
 
-// Evento de Exportación a Excel
+// Generador de Excel con ExcelJS
 btnExportar.addEventListener('click', async () => {
     const textoOriginal = btnExportar.innerText;
 
@@ -383,13 +375,13 @@ btnExportar.addEventListener('click', async () => {
             return;
         }
 
-        btnExportar.innerText = "⏳ Generando Excel optimizado...";
+        btnExportar.innerText = "⏳ Generando Excel compatible...";
         btnExportar.disabled = true;
 
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Reporte Anomalías');
 
-        // Definición de Ancho de Columnas
+        // Columnas
         worksheet.columns = [
             { header: 'Fecha', key: 'fecha', width: 14 },
             { header: 'Hora', key: 'hora', width: 10 },
@@ -402,25 +394,25 @@ btnExportar.addEventListener('click', async () => {
             { header: 'Evidencia (Foto)', key: 'evidencia', width: 24 }
         ];
 
-        // Estilos del Encabezado
+        // Encabezado
         const headerRow = worksheet.getRow(1);
         headerRow.font = { bold: true, color: { argb: 'FFFFFF' }, size: 11 };
         headerRow.fill = {
             type: 'pattern',
             pattern: 'solid',
-            fgColor: { argb: '003366' } // Azul corporativo
+            fgColor: { argb: '003366' }
         };
         headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
         headerRow.height = 25;
 
-        // Recorrer e Insertar Registros
+        // Agregar filas e incrustar imágenes
         for (let i = 0; i < registrosAExportar.length; i++) {
             const item = registrosAExportar[i];
-            const rowIndex = i + 2; // Fila 1 es el encabezado
+            const rowIndex = i + 2;
 
             const maquinasTexto = Array.isArray(item.maquinas) 
-                ? item.maquinas.join(', ') 
-                : (item.maquina || 'N/R');
+                ? item.maquinas.map(m => `Maq ${m}`).join(', ') 
+                : `Maq ${item.maquina || 'N/R'}`;
 
             worksheet.addRow({
                 fecha: item.fecha || '',
@@ -435,10 +427,10 @@ btnExportar.addEventListener('click', async () => {
             });
 
             const row = worksheet.getRow(rowIndex);
-            row.height = 80; // Altura para dar espacio a la foto en la celda
+            row.height = 80;
             row.alignment = { vertical: 'middle', wrapText: true };
 
-            // Descargar e incrustar la imagen si el registro cuenta con ella
+            // Si es imagen, se incrusta en el archivo .xlsx
             if (item.mediaUrl && item.mediaType !== 'video') {
                 try {
                     const imageBuffer = await descargarEIncrustarImagen(item.mediaUrl);
@@ -446,7 +438,7 @@ btnExportar.addEventListener('click', async () => {
                     if (imageBuffer) {
                         const imageId = workbook.addImage({
                             buffer: imageBuffer,
-                            extension: 'png', // Fuerza formato PNG compatible
+                            extension: 'png',
                         });
 
                         worksheet.addImage(imageId, {
@@ -456,12 +448,12 @@ btnExportar.addEventListener('click', async () => {
                         });
                     }
                 } catch (imgErr) {
-                    console.error("No se pudo adjuntar la foto en la fila " + rowIndex, imgErr);
+                    console.error("No se pudo pegar la imagen en la fila " + rowIndex, imgErr);
                 }
             }
         }
 
-        // Descarga del Archivo Excel en el Navegador
+        // Descargar archivo Excel
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const link = document.createElement('a');
@@ -471,8 +463,8 @@ btnExportar.addEventListener('click', async () => {
         URL.revokeObjectURL(link.href);
 
     } catch (err) {
-        console.error("Error en el proceso de exportación:", err);
-        alert("Ocurrió un error al intentar generar el archivo Excel.");
+        console.error("Error al exportar Excel:", err);
+        alert("Error al generar el archivo Excel.");
     } finally {
         btnExportar.innerText = textoOriginal;
         btnExportar.disabled = false;
