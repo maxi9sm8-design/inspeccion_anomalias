@@ -1,249 +1,129 @@
-// app.js - Control de Anomalías Buses Tarapacá
+// IMPORTANTE: Módulos de Firebase
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { 
-    getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc 
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-import { 
-    getStorage, ref, uploadBytes, getDownloadURL, deleteObject 
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// 1. Configuración de Firebase con tu API Key real
+// Configuración de Firebase del Proyecto
 const firebaseConfig = {
-    apiKey: "AIzaSyCfhwfmzg6YJ1BRyCrDgksQQ3C5uGuhHhs",
+    apiKey: "AIzaSy...", // Tu API Key actual
     authDomain: "registro-6bd00.firebaseapp.com",
     projectId: "registro-6bd00",
     storageBucket: "registro-6bd00.firebasestorage.app",
-    messagingSenderId: "1234567890",
-    appId: "1:1234567890:web:abcdef123456"
+    messagingSenderId: "1067272895690",
+    appId: "1:1067272895690:web:78ec332da75fb0f074d008"
 };
 
-// Inicializar servicios Firebase
+// Inicialización de Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const storage = getStorage(app);
+const auth = getAuth(app);
 
-// Lista exacta de Máquinas / Equipos
+// Lista exacta de las 21 máquinas
 const LISTA_MAQUINAS = [
-    "122", "127", "120", "202", "123", "125", "121", 
-    "201", "200", "129", "119", "116", "124", "130", 
-    "113", "115", "203", "114", "128", "117", "126"
+    "122", "127", "120", "202", "108", "126", "116", 
+    "110", "101", "121", "109", "106", "107", "117", 
+    "111", "118", "119", "125", "102", "103", "115"
 ];
 
-// Variables globales de estado
-let maquinasSeleccionadas = [];
-let todosLosRegistros = [];
-window.registrosFiltrados = [];
-
 // Elementos del DOM
+const formRegistro = document.getElementById('formRegistro');
 const maquinasContainer = document.getElementById('maquinasContainer');
-const anomaliaForm = document.getElementById('anomaliaForm');
-const fechaInput = document.getElementById('fechaInput');
-const horaInput = document.getElementById('horaInput');
+const filtroMaquina = document.getElementById('filtroMaquina');
+const filtroFecha = document.getElementById('filtroFecha');
+const btnLimpiarFiltros = document.getElementById('btnLimpiarFiltros');
+const btnExportarExcel = document.getElementById('btnExportarExcel');
 const cuerpoTabla = document.getElementById('cuerpoTabla');
-const statusMsg = document.getElementById('statusMsg');
-const totalResultados = document.getElementById('totalResultados');
+const btnGuardar = document.getElementById('btnGuardar');
 
-const filterRango = document.getElementById('filterRango');
-const filterFechaEspecifica = document.getElementById('filterFechaEspecifica');
-const filterBus = document.getElementById('filterBus');
-const btnLimpiar = document.getElementById('btnLimpiar');
-const btnExportar = document.getElementById('btnExportar');
+// Elementos del Login y Usuario
+const loginOverlay = document.getElementById('loginOverlay');
+const formLogin = document.getElementById('formLogin');
+const loginEmail = document.getElementById('loginEmail');
+const loginPassword = document.getElementById('loginPassword');
+const loginError = document.getElementById('loginError');
+const userInfo = document.getElementById('userInfo');
+const userEmailSpan = document.getElementById('userEmailSpan');
+const btnCerrarSesion = document.getElementById('btnCerrarSesion');
 
-// Inicialización de la App
-document.addEventListener('DOMContentLoaded', () => {
-    inicializarFormulario();
-    renderizarChipsMaquinas();
-    escucharFirestore();
-    configurarFiltros();
+let todosLosRegistros = [];
+
+// --- LÓGICA DE AUTENTICACIÓN (LOGIN) ---
+formLogin.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    loginError.style.display = 'none';
+
+    try {
+        await signInWithEmailAndPassword(auth, loginEmail.value, loginPassword.value);
+        formLogin.reset();
+    } catch (error) {
+        console.error("Error al iniciar sesión:", error);
+        loginError.textContent = "Correo o contraseña incorrectos.";
+        loginError.style.display = 'block';
+    }
 });
 
-// Ajustar fecha y hora actual por defecto
-function inicializarFormulario() {
-    const hoy = new Date();
-    fechaInput.value = hoy.toISOString().split('T')[0];
-    horaInput.value = hoy.toTimeString().slice(0, 5);
-}
+btnCerrarSesion.addEventListener('click', () => {
+    signOut(auth);
+});
 
-// Renderizar selector dinámico de máquinas (Chips)
-function renderizarChipsMaquinas() {
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        loginOverlay.style.display = 'none';
+        userInfo.style.display = 'flex';
+        userEmailSpan.textContent = user.email;
+    } else {
+        loginOverlay.style.display = 'flex';
+        userInfo.style.display = 'none';
+    }
+});
+
+// --- INICIALIZACIÓN DE INTERFAZ ---
+function cargarOpcionesMaquinas() {
     maquinasContainer.innerHTML = '';
-    filterBus.innerHTML = '<option value="todos">Todas las máquinas</option>';
+    filtroMaquina.innerHTML = '<option value="TODAS">Todas las Máquinas</option>';
 
-    LISTA_MAQUINAS.forEach(maq => {
-        // Botón para formulario
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'chip-btn';
-        btn.innerText = `Máquina ${maq}`;
-        btn.addEventListener('click', () => toggleSeleccionMaquina(maq, btn));
-        maquinasContainer.appendChild(btn);
+    LISTA_MAQUINAS.forEach(num => {
+        // Opción para el Checkbox del formulario
+        const label = document.createElement('label');
+        label.className = 'chk-item';
+        label.innerHTML = `<input type="checkbox" name="maquinasCheck" value="${num}"> Maq ${num}`;
+        maquinasContainer.appendChild(label);
 
-        // Opción para filtro
-        const opt = document.createElement('option');
-        opt.value = maq;
-        opt.innerText = `Máquina ${maq}`;
-        filterBus.appendChild(opt);
+        // Opción para el filtro
+        const option = document.createElement('option');
+        option.value = num;
+        option.textContent = `Máquina ${num}`;
+        filtroMaquina.appendChild(option);
     });
 }
 
-function toggleSeleccionMaquina(maq, elemento) {
-    if (maquinasSeleccionadas.includes(maq)) {
-        maquinasSeleccionadas = maquinasSeleccionadas.filter(m => m !== maq);
-        elemento.classList.remove('selected');
-    } else {
-        maquinasSeleccionadas.push(maq);
-        elemento.classList.add('selected');
-    }
+// Establecer fecha y hora actuales por defecto
+function setFechaHoraActuales() {
+    const ahora = new Date();
+    document.getElementById('fecha').value = ahora.toISOString().split('T')[0];
+    const horas = String(ahora.getHours()).padStart(2, '0');
+    const minutos = String(ahora.getMinutes()).padStart(2, '0');
+    document.getElementById('hora').value = `${horas}:${minutos}`;
 }
 
-// Guardar Registro en Firebase Firestore y Storage
-anomaliaForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    if (maquinasSeleccionadas.length === 0) {
-        alert("Por favor, seleccione al menos una máquina.");
-        return;
-    }
-
-    const mediaFile = document.getElementById('mediaInput').files[0];
-    if (!mediaFile) {
-        alert("Debe adjuntar una foto o video como evidencia.");
-        return;
-    }
-
-    const btnGuardar = document.getElementById('btnGuardar');
-    btnGuardar.disabled = true;
-    statusMsg.innerText = "⏳ Subiendo evidencia a la nube...";
-
-    try {
-        // Subir archivo a Firebase Storage
-        const fileExt = mediaFile.name.split('.').pop();
-        const fileName = `evidencias/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const storageRef = ref(storage, fileName);
-        
-        await uploadBytes(storageRef, mediaFile);
-        const mediaUrl = await getDownloadURL(storageRef);
-        const isVideo = mediaFile.type.startsWith('video');
-
-        // Guardar documento en Firestore
-        const nuevoRegistro = {
-            maquinas: [...maquinasSeleccionadas],
-            ruta: document.getElementById('rutaInput').value.trim(),
-            conductor: document.getElementById('conductorInput').value.trim() || 'N/R',
-            fecha: fechaInput.value,
-            hora: horaInput.value,
-            pasajerosSinPagar: parseInt(document.getElementById('pasajerosInput').value) || 0,
-            lugar: document.getElementById('lugarInput').value.trim(),
-            descripcion: document.getElementById('descripcionInput').value.trim(),
-            mediaUrl: mediaUrl,
-            storagePath: fileName,
-            mediaType: isVideo ? 'video' : 'image',
-            creadoEl: new Date().toISOString()
-        };
-
-        await addDoc(collection(db, "anomalias"), nuevoRegistro);
-
-        statusMsg.innerText = "✅ Registro guardado con éxito en la nube.";
-        anomaliaForm.reset();
-        maquinasSeleccionadas = [];
-        document.querySelectorAll('.chip-btn').forEach(btn => btn.classList.remove('selected'));
-        inicializarFormulario();
-
-        setTimeout(() => { statusMsg.innerText = ""; }, 4000);
-
-    } catch (error) {
-        console.error("Error al guardar registro:", error);
-        alert("Error al guardar el registro. Verifique la conexión.");
-        statusMsg.innerText = "❌ Ocurrió un error al guardar.";
-    } finally {
-        btnGuardar.disabled = false;
-    }
-});
-
-// Escuchar cambios en tiempo real desde Firestore
-function escucharFirestore() {
-    const q = query(collection(db, "anomalias"), orderBy("creadoEl", "desc"));
-    
+// Escuchar cambios en la Base de Datos (Tiempo Real)
+function escucharRegistros() {
+    const q = query(collection(db, "registros"), orderBy("timestamp", "desc"));
     onSnapshot(q, (snapshot) => {
         todosLosRegistros = [];
-        snapshot.forEach((docSnap) => {
+        snapshot.forEach(docSnap => {
             todosLosRegistros.push({
                 id: docSnap.id,
                 ...docSnap.data()
             });
         });
         aplicarFiltros();
-    }, (error) => {
-        console.error("Error leyendo datos de Firestore:", error);
-        cuerpoTabla.innerHTML = `<tr><td colspan="10" style="text-align:center; color:red;">Error al cargar datos desde la nube.</td></tr>`;
     });
 }
 
-// Configuración de Filtros
-function configurarFiltros() {
-    filterRango.addEventListener('change', () => {
-        if (filterRango.value !== 'todos') filterFechaEspecifica.value = '';
-        aplicarFiltros();
-    });
-
-    filterFechaEspecifica.addEventListener('change', () => {
-        if (filterFechaEspecifica.value) filterRango.value = 'todos';
-        aplicarFiltros();
-    });
-
-    filterBus.addEventListener('change', aplicarFiltros);
-
-    btnLimpiar.addEventListener('click', () => {
-        filterRango.value = 'todos';
-        filterFechaEspecifica.value = '';
-        filterBus.value = 'todos';
-        aplicarFiltros();
-    });
-}
-
-// Aplicar filtros
-function aplicarFiltros() {
-    let resultados = [...todosLosRegistros];
-
-    const fechaEsp = filterFechaEspecifica.value;
-    if (fechaEsp) {
-        resultados = resultados.filter(r => r.fecha === fechaEsp);
-    } else {
-        const rango = filterRango.value;
-        const hoy = new Date();
-        
-        if (rango === 'dia') {
-            const hoyStr = hoy.toISOString().split('T')[0];
-            resultados = resultados.filter(r => r.fecha === hoyStr);
-        } else if (rango === 'semana') {
-            const haceSieteDias = new Date();
-            haceSieteDias.setDate(hoy.getDate() - 7);
-            resultados = resultados.filter(r => new Date(r.fecha) >= haceSieteDias);
-        } else if (rango === 'mes') {
-            const mesActual = hoy.toISOString().slice(0, 7);
-            resultados = resultados.filter(r => r.fecha && r.fecha.startsWith(mesActual));
-        } else if (rango === 'anio') {
-            const anioActual = hoy.getFullYear().toString();
-            resultados = resultados.filter(r => r.fecha && r.fecha.startsWith(anioActual));
-        }
-    }
-
-    const maqFiltro = filterBus.value;
-    if (maqFiltro !== 'todos') {
-        resultados = resultados.filter(r => {
-            if (Array.isArray(r.maquinas)) {
-                return r.maquinas.includes(maqFiltro);
-            }
-            return r.maquina === maqFiltro;
-        });
-    }
-
-    window.registrosFiltrados = resultados;
-    totalResultados.innerText = `Registros encontrados: ${resultados.length}`;
-    renderizarTabla(resultados);
-}
-
-// Renderizar Tabla HTML
+// Renderizar Tabla (Compatible con iOS/Safari en iPhone)
 function renderizarTabla(registros) {
     cuerpoTabla.innerHTML = '';
 
@@ -259,13 +139,20 @@ function renderizarTabla(registros) {
             ? item.maquinas.map(m => `Maq ${m}`).join(', ') 
             : `Maq ${item.maquina || 'N/R'}`;
 
-        let mediaHtml = 'Sin evidencia';
+        let mediaHtml = '<span style="color:#999;">Sin evidencia</span>';
         if (item.mediaUrl) {
             if (item.mediaType === 'video') {
-                mediaHtml = `<video src="${item.mediaUrl}" class="media-preview" controls preload="metadata"></video>`;
+                mediaHtml = `<video src="${item.mediaUrl}" class="media-preview" controls playsinline preload="metadata" style="max-width:90px; max-height:90px; object-fit:cover; border-radius:6px;"></video>`;
             } else {
+                // Atributos clave para Safari iOS: crossorigin y referrerpolicy
                 mediaHtml = `<a href="${item.mediaUrl}" target="_blank" rel="noopener noreferrer">
-                                <img src="${item.mediaUrl}" class="media-preview" alt="Evidencia" loading="lazy">
+                                <img src="${item.mediaUrl}" 
+                                     class="media-preview" 
+                                     alt="Evidencia" 
+                                     crossorigin="anonymous"
+                                     referrerpolicy="no-referrer"
+                                     style="width:80px; height:80px; object-fit:cover; border-radius:6px; background-color:#e0e0e0; display:block; margin:auto;"
+                                     onerror="this.onerror=null; this.src='https://via.placeholder.com/80?text=Ver+Foto';">
                              </a>`;
             }
         }
@@ -292,181 +179,226 @@ function renderizarTabla(registros) {
     });
 }
 
-// Eliminar Registro
-async function eliminarRegistro(item) {
-    if (!confirm("¿Está seguro de que desea eliminar este registro y su archivo de evidencia?")) return;
+// Aplicar Filtros
+function aplicarFiltros() {
+    const maqSeleccionada = filtroMaquina.value;
+    const fechaSeleccionada = filtroFecha.value;
+
+    let filtrados = todosLosRegistros;
+
+    if (maqSeleccionada !== 'TODAS') {
+        filtrados = filtrados.filter(item => {
+            if (Array.isArray(item.maquinas)) {
+                return item.maquinas.includes(maqSeleccionada);
+            }
+            return item.maquina === maqSeleccionada;
+        });
+    }
+
+    if (fechaSeleccionada) {
+        filtrados = filtrados.filter(item => item.fecha === fechaSeleccionada);
+    }
+
+    renderizarTabla(filtrados);
+}
+
+// Guardar Registro
+formRegistro.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const checkboxes = document.querySelectorAll('input[name="maquinasCheck"]:checked');
+    const maquinasSeleccionadas = Array.from(checkboxes).map(cb => cb.value);
+
+    if (maquinasSeleccionadas.length === 0) {
+        alert("Por favor, selecciona al menos una máquina.");
+        return;
+    }
+
+    btnGuardar.disabled = true;
+    btnGuardar.textContent = "Guardando...";
 
     try {
-        if (item.storagePath) {
-            const storageRef = ref(storage, item.storagePath);
-            await deleteObject(storageRef).catch(e => console.warn("Archivo no encontrado en storage:", e));
+        const mediaInput = document.getElementById('mediaInput');
+        const file = mediaInput.files[0];
+        let mediaUrl = "";
+        let mediaType = "";
+
+        if (file) {
+            mediaType = file.type.startsWith('video') ? 'video' : 'image';
+            const fileRef = ref(storage, `evidencias/${Date.now()}_${file.name}`);
+            await uploadBytes(fileRef, file);
+            mediaUrl = await getDownloadURL(fileRef);
         }
-        await deleteDoc(doc(db, "anomalias", item.id));
-    } catch (err) {
-        console.error("Error al eliminar registro:", err);
-        alert("No se pudo eliminar el registro.");
+
+        const nuevoRegistro = {
+            fecha: document.getElementById('fecha').value,
+            hora: document.getElementById('hora').value,
+            maquinas: maquinasSeleccionadas,
+            ruta: document.getElementById('ruta').value,
+            conductor: document.getElementById('conductor').value,
+            pasajerosSinPagar: parseInt(document.getElementById('pasajerosSinPagar').value) || 0,
+            lugar: document.getElementById('lugar').value,
+            descripcion: document.getElementById('descripcion').value,
+            mediaUrl: mediaUrl,
+            mediaType: mediaType,
+            timestamp: new Date().getTime()
+        };
+
+        await addDoc(collection(db, "registros"), nuevoRegistro);
+
+        formRegistro.reset();
+        setFechaHoraActuales();
+        alert("¡Registro guardado exitosamente!");
+    } catch (error) {
+        console.error("Error al guardar:", error);
+        alert("Ocurrió un error al guardar el registro.");
+    } finally {
+        btnGuardar.disabled = false;
+        btnGuardar.textContent = "Guardar Registro";
+    }
+});
+
+// Eliminar Registro
+async function eliminarRegistro(item) {
+    if (confirm(`¿Estás seguro de eliminar el registro del ${item.fecha} - ${item.hora}?`)) {
+        try {
+            await deleteDoc(doc(db, "registros", item.id));
+            alert("Registro eliminado.");
+        } catch (error) {
+            console.error("Error al eliminar:", error);
+            alert("No se pudo eliminar el registro.");
+        }
     }
 }
 
-/* ==========================================================================
-   MÓDULO DE EXPORTACIÓN A EXCEL (COMPATIBLE CON PC, iOS, ANDROID Y OFFICE 365)
-   ========================================================================== */
-
-// Función universal para procesar imágenes como PNG estándar
-async function descargarEIncrustarImagen(url) {
-    return new Promise((resolve) => {
+// Convertir Imagen a Base64 para ExcelJS (Evita bloqueos de descarga)
+function urlToBase64(url) {
+    return new Promise((resolve, reject) => {
         const img = new Image();
-        img.crossOrigin = "Anonymous";
-        img.src = url;
-
+        img.crossOrigin = 'Anonymous';
         img.onload = () => {
-            try {
-                const canvas = document.createElement("canvas");
-                
-                // Limitar tamaño máximo a 600px para que abra rápido en celulares y no consuma RAM excesiva
-                const MAX_WIDTH = 600;
-                let width = img.naturalWidth || img.width;
-                let height = img.naturalHeight || img.height;
-
-                if (width > MAX_WIDTH) {
-                    height = Math.round((height * MAX_WIDTH) / width);
-                    width = MAX_WIDTH;
-                }
-
-                canvas.width = width;
-                canvas.height = height;
-
-                const ctx = canvas.getContext("2d");
-                ctx.drawImage(img, 0, 0, width, height);
-
-                // Exportar como PNG estándar
-                const dataURL = canvas.toDataURL("image/png");
-
-                const base64Data = dataURL.split(',')[1];
-                const binaryString = window.atob(base64Data);
-                const len = binaryString.length;
-                const bytes = new Uint8Array(len);
-                for (let i = 0; i < len; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                }
-                resolve(bytes.buffer);
-            } catch (err) {
-                console.error("Error procesando imagen para Excel:", err);
-                resolve(null);
-            }
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            const dataURL = canvas.toDataURL('image/png');
+            resolve(dataURL.split(',')[1]);
         };
-
-        img.onerror = (err) => {
-            console.error("Error al cargar la URL de la imagen:", err);
-            resolve(null);
-        };
+        img.onerror = () => reject(new Error('No se pudo cargar la imagen para el Excel'));
+        img.src = url;
     });
 }
 
-// Generador de Excel con ExcelJS
-btnExportar.addEventListener('click', async () => {
-    const textoOriginal = btnExportar.innerText;
+// EXPORTACIÓN A EXCEL (.xlsx Con Fotos Reales)
+btnExportarExcel.addEventListener('click', async () => {
+    if (todosLosRegistros.length === 0) {
+        alert("No hay registros para exportar.");
+        return;
+    }
+
+    btnExportarExcel.disabled = true;
+    btnExportarExcel.textContent = "Generando Excel con Fotos...";
 
     try {
-        const registrosAExportar = window.registrosFiltrados || [];
-
-        if (registrosAExportar.length === 0) {
-            alert("No hay registros disponibles para exportar.");
-            return;
-        }
-
-        btnExportar.innerText = "⏳ Generando Excel compatible...";
-        btnExportar.disabled = true;
-
         const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Reporte Anomalías');
+        const worksheet = workbook.addWorksheet('Control Pasajeros');
 
         // Columnas
         worksheet.columns = [
-            { header: 'Fecha', key: 'fecha', width: 14 },
+            { header: 'Fecha', key: 'fecha', width: 12 },
             { header: 'Hora', key: 'hora', width: 10 },
-            { header: 'Máquina(s)', key: 'maquinas', width: 22 },
-            { header: 'Ruta Principal', key: 'ruta', width: 25 },
-            { header: 'Conductor', key: 'conductor', width: 22 },
-            { header: 'Pasajeros Sin Pagar', key: 'pasajeros', width: 20 },
-            { header: 'Lugar / Parada', key: 'lugar', width: 25 },
-            { header: 'Descripción', key: 'descripcion', width: 38 },
-            { header: 'Evidencia (Foto)', key: 'evidencia', width: 24 }
+            { header: 'Máquinas', key: 'maquinas', width: 20 },
+            { header: 'Ruta', key: 'ruta', width: 25 },
+            { header: 'Conductor', key: 'conductor', width: 20 },
+            { header: 'Pasajeros Sin Pagar', key: 'sinPagar', width: 20 },
+            { header: 'Lugar', key: 'lugar', width: 25 },
+            { header: 'Observaciones', key: 'descripcion', width: 30 },
+            { header: 'Foto Evidencia', key: 'foto', width: 22 }
         ];
 
-        // Encabezado
-        const headerRow = worksheet.getRow(1);
-        headerRow.font = { bold: true, color: { argb: 'FFFFFF' }, size: 11 };
-        headerRow.fill = {
+        // Estilo Encabezado
+        worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFF' } };
+        worksheet.getRow(1).fill = {
             type: 'pattern',
             pattern: 'solid',
-            fgColor: { argb: '003366' }
+            fgColor: { argb: '343A40' }
         };
-        headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
-        headerRow.height = 25;
 
-        // Agregar filas e incrustar imágenes
-        for (let i = 0; i < registrosAExportar.length; i++) {
-            const item = registrosAExportar[i];
+        for (let i = 0; i < todosLosRegistros.length; i++) {
+            const item = todosLosRegistros[i];
             const rowIndex = i + 2;
 
             const maquinasTexto = Array.isArray(item.maquinas) 
                 ? item.maquinas.map(m => `Maq ${m}`).join(', ') 
                 : `Maq ${item.maquina || 'N/R'}`;
 
-            worksheet.addRow({
+            const row = worksheet.addRow({
                 fecha: item.fecha || '',
                 hora: item.hora || '',
                 maquinas: maquinasTexto,
                 ruta: item.ruta || '',
                 conductor: item.conductor || 'N/R',
-                pasajeros: item.pasajerosSinPagar || 0,
+                sinPagar: item.pasajerosSinPagar || 0,
                 lugar: item.lugar || '',
                 descripcion: item.descripcion || '',
-                evidencia: (item.mediaType === 'video') ? '[Evidencia en Video]' : ''
+                foto: ''
             });
 
-            const row = worksheet.getRow(rowIndex);
-            row.height = 80;
-            row.alignment = { vertical: 'middle', wrapText: true };
+            row.height = 70; // Espacio vertical para la foto
 
-            // Si es imagen, se incrusta en el archivo .xlsx
             if (item.mediaUrl && item.mediaType !== 'video') {
                 try {
-                    const imageBuffer = await descargarEIncrustarImagen(item.mediaUrl);
+                    const base64Data = await urlToBase64(item.mediaUrl);
+                    const imageId = workbook.addImage({
+                        base64: base64Data,
+                        extension: 'png',
+                    });
 
-                    if (imageBuffer) {
-                        const imageId = workbook.addImage({
-                            buffer: imageBuffer,
-                            extension: 'png',
-                        });
-
-                        worksheet.addImage(imageId, {
-                            tl: { col: 8, row: rowIndex - 1 },
-                            ext: { width: 130, height: 95 },
-                            editAs: 'oneCell'
-                        });
-                    }
-                } catch (imgErr) {
-                    console.error("No se pudo pegar la imagen en la fila " + rowIndex, imgErr);
+                    worksheet.addImage(imageId, {
+                        tl: { col: 8, row: rowIndex - 1 },
+                        ext: { width: 80, height: 80 }
+                    });
+                } catch (e) {
+                    console.warn("No se pudo incrustar la foto en Excel:", e);
+                    row.getCell('foto').value = "Error al cargar foto";
                 }
+            } else if (item.mediaType === 'video') {
+                row.getCell('foto').value = "Video (Ver en app)";
+            } else {
+                row.getCell('foto').value = "Sin Evidencia";
             }
         }
 
-        // Descargar archivo Excel
+        // Descargar Archivo Excel
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `Reporte_Anomalias_${new Date().toISOString().slice(0,10)}.xlsx`;
-        link.click();
-        URL.revokeObjectURL(link.href);
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Reporte_Control_Pasajeros_${new Date().toISOString().split('T')[0]}.xlsx`;
+        a.click();
+        window.URL.revokeObjectURL(url);
 
     } catch (err) {
-        console.error("Error al exportar Excel:", err);
-        alert("Error al generar el archivo Excel.");
+        console.error("Error al exportar:", err);
+        alert("Ocurrió un error al generar el archivo Excel.");
     } finally {
-        btnExportar.innerText = textoOriginal;
-        btnExportar.disabled = false;
+        btnExportarExcel.disabled = false;
+        btnExportarExcel.textContent = "Exportar a Excel (.xlsx con Fotos)";
     }
 });
+
+// Eventos de Filtros
+filtroMaquina.addEventListener('change', aplicarFiltros);
+filtroFecha.addEventListener('change', aplicarFiltros);
+btnLimpiarFiltros.addEventListener('click', () => {
+    filtroMaquina.value = 'TODAS';
+    filtroFecha.value = '';
+    aplicarFiltros();
+});
+
+// Inicializar Aplicación
+cargarOpcionesMaquinas();
+setFechaHoraActuales();
+escucharRegistros();
