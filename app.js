@@ -2,7 +2,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 // Configuración de Firebase del Proyecto
 const firebaseConfig = {
@@ -48,8 +48,38 @@ const userEmailSpan = document.getElementById('userEmailSpan');
 const btnCerrarSesion = document.getElementById('btnCerrarSesion');
 
 let todosLosRegistros = [];
+let unsubscribeSnapshot = null; // Para detener la escucha al cerrar sesión
 
-// --- LÓGICA DE AUTENTICACIÓN (LOGIN) ---
+// --- CONTROL DE ACCESO Y AUTENTICACIÓN BLINDADA ---
+
+// Guardián de Autenticación
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        // 🟢 USUARIO AUTENTICADO
+        loginOverlay.style.display = 'none';
+        userInfo.style.display = 'flex';
+        userEmailSpan.textContent = user.email;
+
+        // Iniciar la escucha en tiempo real de Firestore solo si hay sesión activa
+        escucharRegistros();
+    } else {
+        // 🔴 USUARIO NO AUTENTICADO / SESIÓN CERRADA
+        loginOverlay.style.display = 'flex';
+        userInfo.style.display = 'none';
+
+        // Detener escucha activa en tiempo real si existía una
+        if (unsubscribeSnapshot) {
+            unsubscribeSnapshot();
+            unsubscribeSnapshot = null;
+        }
+
+        // Limpiar tabla y variables
+        todosLosRegistros = [];
+        cuerpoTabla.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 20px; color: #888;">Debes iniciar sesión para ver los registros.</td></tr>';
+    }
+});
+
+// Evento Submit Formulario de Login
 formLogin.addEventListener('submit', async (e) => {
     e.preventDefault();
     loginError.style.display = 'none';
@@ -64,18 +94,12 @@ formLogin.addEventListener('submit', async (e) => {
     }
 });
 
-btnCerrarSesion.addEventListener('click', () => {
-    signOut(auth);
-});
-
-onAuthStateChanged(auth, (user) => {
-    if (user) {
-        loginOverlay.style.display = 'none';
-        userInfo.style.display = 'flex';
-        userEmailSpan.textContent = user.email;
-    } else {
-        loginOverlay.style.display = 'flex';
-        userInfo.style.display = 'none';
+// Cerrar Sesión
+btnCerrarSesion.addEventListener('click', async () => {
+    try {
+        await signOut(auth);
+    } catch (error) {
+        console.error("Error al cerrar sesión:", error);
     }
 });
 
@@ -85,13 +109,13 @@ function cargarOpcionesMaquinas() {
     filtroMaquina.innerHTML = '<option value="TODAS">Todas las Máquinas</option>';
 
     LISTA_MAQUINAS.forEach(num => {
-        // Opción para el Checkbox del formulario
+        // Checkbox para el formulario
         const label = document.createElement('label');
         label.className = 'chk-item';
         label.innerHTML = `<input type="checkbox" name="maquinasCheck" value="${num}"> Maq ${num}`;
         maquinasContainer.appendChild(label);
 
-        // Opción para el filtro
+        // Opción para el selector de filtro
         const option = document.createElement('option');
         option.value = num;
         option.textContent = `Máquina ${num}`;
@@ -99,19 +123,30 @@ function cargarOpcionesMaquinas() {
     });
 }
 
-// Establecer fecha y hora actuales por defecto
 function setFechaHoraActuales() {
     const ahora = new Date();
-    document.getElementById('fecha').value = ahora.toISOString().split('T')[0];
+    document.getElementById('fecha').value = meFormatFecha(ahora);
     const horas = String(ahora.getHours()).padStart(2, '0');
     const minutos = String(ahora.getMinutes()).padStart(2, '0');
     document.getElementById('hora').value = `${horas}:${minutos}`;
 }
 
-// Escuchar cambios en la Base de Datos (Tiempo Real)
+function meFormatFecha(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+// --- CONSULTAS Y REALTIME DATA ---
 function escucharRegistros() {
+    // Si ya existe una suscripción previa, cancelarla antes de crear una nueva
+    if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+    }
+
     const q = query(collection(db, "registros"), orderBy("timestamp", "desc"));
-    onSnapshot(q, (snapshot) => {
+    unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
         todosLosRegistros = [];
         snapshot.forEach(docSnap => {
             todosLosRegistros.push({
@@ -120,10 +155,12 @@ function escucharRegistros() {
             });
         });
         aplicarFiltros();
+    }, (error) => {
+        console.error("Error al escuchar registros (Permisos denegados):", error);
     });
 }
 
-// Renderizar Tabla (Compatible con iOS/Safari en iPhone)
+// Renderizar Tabla
 function renderizarTabla(registros) {
     cuerpoTabla.innerHTML = '';
 
@@ -144,7 +181,6 @@ function renderizarTabla(registros) {
             if (item.mediaType === 'video') {
                 mediaHtml = `<video src="${item.mediaUrl}" class="media-preview" controls playsinline preload="metadata" style="max-width:90px; max-height:90px; object-fit:cover; border-radius:6px;"></video>`;
             } else {
-                // Atributos clave para Safari iOS: crossorigin y referrerpolicy
                 mediaHtml = `<a href="${item.mediaUrl}" target="_blank" rel="noopener noreferrer">
                                 <img src="${item.mediaUrl}" 
                                      class="media-preview" 
@@ -206,6 +242,12 @@ function aplicarFiltros() {
 formRegistro.addEventListener('submit', async (e) => {
     e.preventDefault();
 
+    // Verificación adicional de autenticación
+    if (!auth.currentUser) {
+        alert("Debes iniciar sesión para realizar un registro.");
+        return;
+    }
+
     const checkboxes = document.querySelectorAll('input[name="maquinasCheck"]:checked');
     const maquinasSeleccionadas = Array.from(checkboxes).map(cb => cb.value);
 
@@ -241,7 +283,8 @@ formRegistro.addEventListener('submit', async (e) => {
             descripcion: document.getElementById('descripcion').value,
             mediaUrl: mediaUrl,
             mediaType: mediaType,
-            timestamp: new Date().getTime()
+            timestamp: new Date().getTime(),
+            creadoPor: auth.currentUser.email
         };
 
         await addDoc(collection(db, "registros"), nuevoRegistro);
@@ -251,7 +294,7 @@ formRegistro.addEventListener('submit', async (e) => {
         alert("¡Registro guardado exitosamente!");
     } catch (error) {
         console.error("Error al guardar:", error);
-        alert("Ocurrió un error al guardar el registro.");
+        alert("Ocurrió un error al guardar el registro. Verifica tus permisos.");
     } finally {
         btnGuardar.disabled = false;
         btnGuardar.textContent = "Guardar Registro";
@@ -260,6 +303,11 @@ formRegistro.addEventListener('submit', async (e) => {
 
 // Eliminar Registro
 async function eliminarRegistro(item) {
+    if (!auth.currentUser) {
+        alert("Debes iniciar sesión para eliminar registros.");
+        return;
+    }
+
     if (confirm(`¿Estás seguro de eliminar el registro del ${item.fecha} - ${item.hora}?`)) {
         try {
             await deleteDoc(doc(db, "registros", item.id));
@@ -271,7 +319,7 @@ async function eliminarRegistro(item) {
     }
 }
 
-// Convertir Imagen a Base64 para ExcelJS (Evita bloqueos de descarga)
+// Convertir Imagen a Base64
 function urlToBase64(url) {
     return new Promise((resolve, reject) => {
         const img = new Image();
@@ -290,8 +338,13 @@ function urlToBase64(url) {
     });
 }
 
-// EXPORTACIÓN A EXCEL (.xlsx Con Fotos Reales)
+// Exportar Excel (.xlsx)
 btnExportarExcel.addEventListener('click', async () => {
+    if (!auth.currentUser) {
+        alert("Debes iniciar sesión para exportar datos.");
+        return;
+    }
+
     if (todosLosRegistros.length === 0) {
         alert("No hay registros para exportar.");
         return;
@@ -304,7 +357,6 @@ btnExportarExcel.addEventListener('click', async () => {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Control Pasajeros');
 
-        // Columnas
         worksheet.columns = [
             { header: 'Fecha', key: 'fecha', width: 12 },
             { header: 'Hora', key: 'hora', width: 10 },
@@ -317,7 +369,6 @@ btnExportarExcel.addEventListener('click', async () => {
             { header: 'Foto Evidencia', key: 'foto', width: 22 }
         ];
 
-        // Estilo Encabezado
         worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFF' } };
         worksheet.getRow(1).fill = {
             type: 'pattern',
@@ -345,7 +396,7 @@ btnExportarExcel.addEventListener('click', async () => {
                 foto: ''
             });
 
-            row.height = 70; // Espacio vertical para la foto
+            row.height = 70;
 
             if (item.mediaUrl && item.mediaType !== 'video') {
                 try {
@@ -370,7 +421,6 @@ btnExportarExcel.addEventListener('click', async () => {
             }
         }
 
-        // Descargar Archivo Excel
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = window.URL.createObjectURL(blob);
@@ -398,7 +448,6 @@ btnLimpiarFiltros.addEventListener('click', () => {
     aplicarFiltros();
 });
 
-// Inicializar Aplicación
+// Inicialización de Interfaz Básica
 cargarOpcionesMaquinas();
 setFechaHoraActuales();
-escucharRegistros();
