@@ -1,0 +1,21 @@
+{
+  "short_name": "Buses Tarapacá",
+  "name": "Control de Anomalías - Buses Tarapacá",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3448/3448339.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3448/3448339.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#003366",
+  "theme_color": "#003366",
+  "display": "standalone",
+  "orientation": "portrait"
+}

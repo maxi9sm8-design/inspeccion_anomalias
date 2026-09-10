@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Anomalías - Buses Tarapacá</title>
+
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#003366">
+
+    <style>
+        :root {
+            --primary: #003366;
+            --secondary: #d9534f;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --border: #cccccc;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f2f5;
+            color: var(--dark);
+        }
+
+        .container {
+            max-width: 1150px;
+            margin: 0 auto;
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        h1, h2 {
+            color: var(--primary);
+            text-align: center;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 15px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="time"],
+        input[type="date"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+
+        textarea {
+            resize: vertical;
+            height: 80px;
+        }
+
+        .machines-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            background: #f8f9fa;
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+
+        .chip-btn {
+            background-color: #e9ecef;
+            border: 1px solid #ced4da;
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.15s ease;
+        }
+
+        .chip-btn.selected {
+            background-color: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            font-weight: bold;
+        }
+
+        .btn:hover {
+            background-color: #002244;
+        }
+
+        .btn-download {
+            background-color: #28a745;
+            width: auto;
+        }
+
+        .btn-download:hover {
+            background-color: #218838;
+        }
+
+        .btn-danger {
+            background-color: var(--secondary);
+            padding: 6px 12px;
+            font-size: 13px;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .history-section {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid var(--primary);
+        }
+
+        .filter-card {
+            background-color: #eef2f7;
+            padding: 18px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #d0d7de;
+        }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            align-items: end;
+        }
+
+        .summary-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .summary-badge {
+            background-color: var(--primary);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 13px;
+        }
+
+        th, td {
+            border: 1px solid var(--border);
+            padding: 8px;
+            text-align: left;
+            vertical-align: middle;
+        }
+
+        th {
+            background-color: var(--primary);
+            color: white;
+            white-space: nowrap;
+        }
+
+        .media-preview {
+            max-width: 140px;
+            max-height: 100px;
+            object-fit: cover;
+            border-radius: 6px;
+            display: block;
+            margin: auto;
+        }
+
+        .status-msg {
+            text-align: center;
+            font-weight: bold;
+            color: var(--primary);
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .filter-grid {
+                grid-template-columns: 1fr;
+            }
+            .btn-download {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🚌 Control de Anomalías - Buses Tarapacá (Nube)</h1>
+
+    <form id="anomaliaForm">
+        <div class="form-group">
+            <label>Seleccione Máquina(s): <small style="font-weight:normal; color:#666;">(Puede marcar varias a la vez)</small></label>
+            <div class="machines-selector" id="maquinasContainer"></div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="rutaInput">Ruta Principal:</label>
+                <input type="text" id="rutaInput" placeholder="Ej: Iquique - Alto Hospicio" required>
+            </div>
+            <div class="form-group">
+                <label for="conductorInput">Nombre Conductor:</label>
+                <input type="text" id="conductorInput" placeholder="Ej: Juan Pérez (Opcional)">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="fechaInput">Fecha:</label>
+                <input type="date" id="fechaInput" required>
+            </div>
+            <div class="form-group">
+                <label for="horaInput">Hora del Evento:</label>
+                <input type="time" id="horaInput" required>
+            </div>
+            <div class="form-group">
+                <label for="pasajerosInput">Pasajeros sin Pagar:</label>
+                <input type="number" id="pasajerosInput" min="0" value="0" required>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="lugarInput">Lugar / Comuna / Parada:</label>
+            <input type="text" id="lugarInput" placeholder="Ej: Cruce Pozo Almonte, Sector Terminal..." required>
+        </div>
+
+        <div class="form-group">
+            <label for="descripcionInput">Descripción de la Anomalía:</label>
+            <textarea id="descripcionInput" placeholder="Detalle qué sucedió..." required></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="mediaInput">Foto o Video de Evidencia:</label>
+            <input type="file" id="mediaInput" accept="image/*,video/*" required>
+        </div>
+
+        <button type="submit" id="btnGuardar" class="btn">☁️ Guardar en la Nube</button>
+        <div id="statusMsg" class="status-msg"></div>
+    </form>
+
+    <div class="history-section">
+        <h2>🔍 Historial de Reportes en Tiempo Real</h2>
+
+        <div class="filter-card">
+            <div class="filter-grid">
+                <div>
+                    <label for="filterRango">Filtrar por Rango:</label>
+                    <select id="filterRango">
+                        <option value="todos">Todos los registros</option>
+                        <option value="dia">Hoy (Día)</option>
+                        <option value="semana">Esta Semana</option>
+                        <option value="mes">Este Mes</option>
+                        <option value="anio">Este Año</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="filterFechaEspecifica">O Fecha Específica:</label>
+                    <input type="date" id="filterFechaEspecifica">
+                </div>
+
+                <div>
+                    <label for="filterBus">Filtrar por Máquina:</label>
+                    <select id="filterBus">
+                        <option value="todos">Todas las máquinas</option>
+                    </select>
+                </div>
+
+                <div>
+                    <button id="btnLimpiar" class="btn" style="background-color: #6c757d;">Limpiar Filtros</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="summary-bar">
+            <span class="summary-badge" id="totalResultados">Registros encontrados: 0</span>
+            <button id="btnExportar" class="btn btn-download">📊 Exportar Filtro a Excel</button>
+        </div>
+
+        <div class="table-wrapper">
+            <table id="tablaAnomalias">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Hora</th>
+                        <th>Máquina(s)</th>
+                        <th>Ruta Principal</th>
+                        <th>Conductor</th>
+                        <th>Pasajeros Sin Pagar</th>
+                        <th>Lugar / Parada</th>
+                        <th>Descripción</th>
+                        <th>Evidencia</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody id="cuerpoTabla">
+                    <tr><td colspan="10" style="text-align:center;">Cargando historial desde la nube...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="./main.js" type="module"></script>
+
+</body>
+</html>
