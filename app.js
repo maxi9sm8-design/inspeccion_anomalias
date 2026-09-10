@@ -7,9 +7,9 @@ import {
     getStorage, ref, uploadBytes, getDownloadURL, deleteObject 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
-// 1. Configuración de Firebase vinculada a tu proyecto registro-6bd00
+// 1. Configuración de Firebase con tu API Key real
 const firebaseConfig = {
-    apiKey: "TU_API_KEY_REAL_AQUI", // Coloca tu API Key de Firebase (ej: AIzaSy...)
+    apiKey: "AIzaSyCfhwfmzg6YJ1BRyCrDgksQQ3C5uGuhHhs",
     authDomain: "registro-6bd00.firebaseapp.com",
     projectId: "registro-6bd00",
     storageBucket: "registro-6bd00.firebasestorage.app",
