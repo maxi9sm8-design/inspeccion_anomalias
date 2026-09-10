@@ -2,7 +2,7 @@ const CACHE_NAME = 'buses-tarapaca-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/main.js',
+  '/app.js',
   '/manifest.json'
 ];
 
