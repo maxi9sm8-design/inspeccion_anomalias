@@ -1,480 +1,469 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+// app.js - Control de Anomalías Buses Tarapacá
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { 
     getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc 
-} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { 
-    getStorage, ref, uploadBytesResumable, getDownloadURL 
-} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-storage.js";
+    getStorage, ref, uploadBytes, getDownloadURL, deleteObject 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
-// 1. Configuración de Firebase (Proyecto: registro-6bd00)
+// 1. Configuración de Firebase (registro-6bd00)
 const firebaseConfig = {
+    apiKey: "AIzaSyDummyKey_ReplaceIfRequired",
     authDomain: "registro-6bd00.firebaseapp.com",
     projectId: "registro-6bd00",
     storageBucket: "registro-6bd00.firebasestorage.app",
-    messagingSenderId: "834195156689",
-    appId: "1:834195156689:web:3e271a39626e2e2a0fef19"
+    messagingSenderId: "1234567890",
+    appId: "1:1234567890:web:abcdef123456"
 };
 
+// Inicializar servicios Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// Estado local
+// Lista de Máquinas disponibles
+const LISTA_MAQUINAS = [
+    "Maq 01", "Maq 02", "Maq 03", "Maq 04", "Maq 05",
+    "Maq 06", "Maq 07", "Maq 08", "Maq 09", "Maq 10",
+    "Maq 11", "Maq 12", "Maq 15", "Maq 18", "Maq 20"
+];
+
+// Variables globales de estado
 let maquinasSeleccionadas = [];
-let historialCompleto = [];
+let todosLosRegistros = [];
+window.registrosFiltrados = [];
 
-const MAQUINAS_DISPONIBLES = Array.from({ length: 40 }, (_, i) => `Bus ${101 + i}`);
+// Elementos del DOM
+const maquinasContainer = document.getElementById('maquinasContainer');
+const anomaliaForm = document.getElementById('anomaliaForm');
+const fechaInput = document.getElementById('fechaInput');
+const horaInput = document.getElementById('horaInput');
+const cuerpoTabla = document.getElementById('cuerpoTabla');
+const statusMsg = document.getElementById('statusMsg');
+const totalResultados = document.getElementById('totalResultados');
 
-// 2. Inicialización del DOM y Eventos
-document.addEventListener("DOMContentLoaded", () => {
+const filterRango = document.getElementById('filterRango');
+const filterFechaEspecifica = document.getElementById('filterFechaEspecifica');
+const filterBus = document.getElementById('filterBus');
+const btnLimpiar = document.getElementById('btnLimpiar');
+const btnExportar = document.getElementById('btnExportar');
+
+// Inicialización de la App
+document.addEventListener('DOMContentLoaded', () => {
+    inicializarFormulario();
     renderizarChipsMaquinas();
-    escucharHistorialEnTiempoReal();
-    registrarServiceWorker();
-
-    document.getElementById("anomaliaForm").addEventListener("submit", manejarEnvioFormulario);
-    document.getElementById("btnExportar").addEventListener("click", exportarAExcelConImagenes);
-    document.getElementById("filterRango").addEventListener("change", aplicarFiltros);
-    document.getElementById("filterFechaEspecifica").addEventListener("change", aplicarFiltros);
-    document.getElementById("filterBus").addEventListener("change", aplicarFiltros);
-    document.getElementById("btnLimpiar").addEventListener("click", limpiarFiltros);
-
-    const hoy = new Date();
-    document.getElementById("fechaInput").value = hoy.toISOString().split("T")[0];
-    document.getElementById("horaInput").value = hoy.toTimeString().slice(0, 5);
+    escucharFirestore();
+    configurarFiltros();
 });
 
-// Renderizar Selector Múltiple de Máquinas
+// Ajustar fecha y hora actual por defecto
+function inicializarFormulario() {
+    const hoy = new Date();
+    fechaInput.value = hoy.toISOString().split('T')[0];
+    horaInput.value = hoy.toTimeString().slice(0, 5);
+}
+
+// Renderizar selector dinámico de máquinas (Chips)
 function renderizarChipsMaquinas() {
-    const container = document.getElementById("maquinasContainer");
-    const selectFiltro = document.getElementById("filterBus");
+    maquinasContainer.innerHTML = '';
+    filterBus.innerHTML = '<option value="todos">Todas las máquinas</option>';
 
-    container.innerHTML = "";
-    selectFiltro.innerHTML = '<option value="todos">Todas las máquinas</option>';
+    LISTA_MAQUINAS.forEach(maq => {
+        // Opción para el formulario
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'chip-btn';
+        btn.innerText = maq;
+        btn.addEventListener('click', () => toggleSeleccionMaquina(maq, btn));
+        maquinasContainer.appendChild(btn);
 
-    MAQUINAS_DISPONIBLES.forEach(bus => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "chip-btn";
-        btn.textContent = bus;
-        btn.addEventListener("click", () => {
-            btn.classList.toggle("selected");
-            if (maquinasSeleccionadas.includes(bus)) {
-                maquinasSeleccionadas = maquinasSeleccionadas.filter(m => m !== bus);
-            } else {
-                maquinasSeleccionadas.push(bus);
-            }
-        });
-        container.appendChild(btn);
-
-        const option = document.createElement("option");
-        option.value = bus;
-        option.textContent = bus;
-        selectFiltro.appendChild(option);
+        // Opción para el filtro
+        const opt = document.createElement('option');
+        opt.value = maq;
+        opt.innerText = maq;
+        filterBus.appendChild(opt);
     });
 }
 
-// 3. Compresión de Imágenes
-function optimizarImagen(file) {
-    return new Promise((resolve) => {
-        if (!file.type.startsWith("image/")) {
-            resolve(file);
-            return;
-        }
-
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = (e) => {
-            const img = new Image();
-            img.src = e.target.result;
-            img.onload = () => {
-                const canvas = document.createElement("canvas");
-                const MAX_WIDTH = 1280;
-                const MAX_HEIGHT = 720;
-                let width = img.width;
-                let height = img.height;
-
-                if (width > height) {
-                    if (width > MAX_WIDTH) {
-                        height *= MAX_WIDTH / width;
-                        width = MAX_WIDTH;
-                    }
-                } else {
-                    if (height > MAX_HEIGHT) {
-                        width *= MAX_HEIGHT / height;
-                        height = MAX_HEIGHT;
-                    }
-                }
-
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext("2d");
-                ctx.drawImage(img, 0, 0, width, height);
-
-                canvas.toBlob((blob) => {
-                    resolve(new File([blob], file.name, { type: "image/jpeg" }));
-                }, "image/jpeg", 0.7);
-            };
-        };
-    });
+function toggleSeleccionMaquina(maq, elemento) {
+    if (maquinasSeleccionadas.includes(maq)) {
+        maquinasSeleccionadas = maquinasSeleccionadas.filter(m => m !== maq);
+        elemento.classList.remove('selected');
+    } else {
+        maquinasSeleccionadas.push(maq);
+        elemento.classList.add('selected');
+    }
 }
 
-// 4. Subida a Firebase Storage
-async function subirArchivoStorage(file, mostrarProgreso) {
-    const fileComprimido = await optimizarImagen(file);
-    const rutaRef = ref(storage, `evidencias/${Date.now()}_${fileComprimido.name}`);
-    const uploadTask = uploadBytesResumable(rutaRef, fileComprimido);
-
-    return new Promise((resolve, reject) => {
-        uploadTask.on("state_changed",
-            (snapshot) => {
-                const progreso = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                mostrarProgreso(`Subiendo archivo: ${Math.round(progreso)}%`);
-            },
-            (error) => reject(error),
-            async () => {
-                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                resolve({
-                    url: downloadURL,
-                    tipo: file.type.startsWith("video/") ? "video" : "imagen"
-                });
-            }
-        );
-    });
-}
-
-// 5. Envío del Formulario
-async function manejarEnvioFormulario(e) {
+// Guardar Registro en Firebase Firestore y Storage
+anomaliaForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const btnGuardar = document.getElementById("btnGuardar");
-    const statusMsg = document.getElementById("statusMsg");
 
     if (maquinasSeleccionadas.length === 0) {
-        alert("Por favor seleccione al menos una máquina.");
+        alert("Por favor, seleccione al menos una máquina.");
         return;
     }
 
-    const mediaInput = document.getElementById("mediaInput");
-    if (!mediaInput.files[0]) {
+    const mediaFile = document.getElementById('mediaInput').files[0];
+    if (!mediaFile) {
         alert("Debe adjuntar una foto o video como evidencia.");
         return;
     }
 
-    const file = mediaInput.files[0];
-    if (file.type.startsWith("video/") && file.size > 20 * 1024 * 1024) {
-        alert("El archivo de video supera el límite permitido de 20MB.");
-        return;
-    }
+    const btnGuardar = document.getElementById('btnGuardar');
+    btnGuardar.disabled = true;
+    statusMsg.innerText = "⏳ Subiendo evidencia a la nube...";
 
     try {
-        btnGuardar.disabled = true;
-        statusMsg.style.color = "#003366";
+        // 1. Subir archivo a Firebase Storage
+        const fileExt = mediaFile.name.split('.').pop();
+        const fileName = `evidencias/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const storageRef = ref(storage, fileName);
         
-        const evidencia = await subirArchivoStorage(file, (msg) => {
-            statusMsg.textContent = msg;
-        });
+        await uploadBytes(storageRef, mediaFile);
+        const mediaUrl = await getDownloadURL(storageRef);
+        const isVideo = mediaFile.type.startsWith('video');
 
-        statusMsg.textContent = "Guardando en Firestore...";
-
+        // 2. Crear documento en Firestore
         const nuevoRegistro = {
             maquinas: [...maquinasSeleccionadas],
-            ruta: document.getElementById("rutaInput").value.trim(),
-            conductor: document.getElementById("conductorInput").value.trim() || "N/A",
-            fecha: document.getElementById("fechaInput").value,
-            hora: document.getElementById("horaInput").value,
-            pasajerosSinPagar: parseInt(document.getElementById("pasajerosInput").value, 10) || 0,
-            lugar: document.getElementById("lugarInput").value.trim(),
-            descripcion: document.getElementById("descripcionInput").value.trim(),
-            mediaUrl: evidencia.url,
-            mediaTipo: evidencia.tipo,
-            creadoEn: new Date().toISOString()
+            ruta: document.getElementById('rutaInput').value.trim(),
+            conductor: document.getElementById('conductorInput').value.trim() || 'N/R',
+            fecha: fechaInput.value,
+            hora: horaInput.value,
+            pasajerosSinPagar: parseInt(document.getElementById('pasajerosInput').value) || 0,
+            lugar: document.getElementById('lugarInput').value.trim(),
+            descripcion: document.getElementById('descripcionInput').value.trim(),
+            mediaUrl: mediaUrl,
+            storagePath: fileName,
+            mediaType: isVideo ? 'video' : 'image',
+            creadoEl: new Date().toISOString()
         };
 
         await addDoc(collection(db, "anomalias"), nuevoRegistro);
 
-        statusMsg.style.color = "green";
-        statusMsg.textContent = "✅ ¡Anomalía registrada exitosamente!";
-        
-        document.getElementById("anomaliaForm").reset();
+        statusMsg.innerText = "✅ Registro guardado con éxito en la nube.";
+        anomaliaForm.reset();
         maquinasSeleccionadas = [];
-        document.querySelectorAll(".chip-btn.selected").forEach(c => c.classList.remove("selected"));
+        document.querySelectorAll('.chip-btn').forEach(btn => btn.classList.remove('selected'));
+        inicializarFormulario();
 
-        setTimeout(() => { statusMsg.textContent = ""; }, 4000);
+        setTimeout(() => { statusMsg.innerText = ""; }, 4000);
 
-    } catch (err) {
-        console.error("Error al guardar:", err);
-        statusMsg.style.color = "red";
-        statusMsg.textContent = `❌ Error al guardar: ${err.message}`;
+    } catch (error) {
+        console.error("Error al guardar registro:", error);
+        alert("Error al guardar el registro. Verifique la conexión.");
+        statusMsg.innerText = "❌ Ocurrió un error al guardar.";
     } finally {
         btnGuardar.disabled = false;
     }
-}
+});
 
-// 6. Sincronización en Tiempo Real
-function escucharHistorialEnTiempoReal() {
-    const q = query(collection(db, "anomalias"), orderBy("creadoEn", "desc"));
-
+// Escuchar cambios en tiempo real desde Firestore
+function escucharFirestore() {
+    const q = query(collection(db, "anomalias"), orderBy("creadoEl", "desc"));
+    
     onSnapshot(q, (snapshot) => {
-        historialCompleto = [];
+        todosLosRegistros = [];
         snapshot.forEach((docSnap) => {
-            historialCompleto.push({ id: docSnap.id, ...docSnap.data() });
+            todosLosRegistros.push({
+                id: docSnap.id,
+                ...docSnap.data()
+            });
         });
         aplicarFiltros();
-    }, (err) => {
-        console.error("Error al leer Firestore:", err);
-        document.getElementById("cuerpoTabla").innerHTML = `<tr><td colspan="10" style="color:red; text-align:center;">Error de conexión con la base de datos.</td></tr>`;
+    }, (error) => {
+        console.error("Error leyendo datos de Firestore:", error);
+        cuerpoTabla.innerHTML = `<tr><td colspan="10" style="text-align:center; color:red;">Error al cargar datos desde la nube.</td></tr>`;
     });
 }
 
-// 7. Filtrado Dinámico
+// Configuración de Filtros
+function configurarFiltros() {
+    filterRango.addEventListener('change', () => {
+        if (filterRango.value !== 'todos') filterFechaEspecifica.value = '';
+        aplicarFiltros();
+    });
+
+    filterFechaEspecifica.addEventListener('change', () => {
+        if (filterFechaEspecifica.value) filterRango.value = 'todos';
+        aplicarFiltros();
+    });
+
+    filterBus.addEventListener('change', aplicarFiltros);
+
+    btnLimpiar.addEventListener('click', () => {
+        filterRango.value = 'todos';
+        filterFechaEspecifica.value = '';
+        filterBus.value = 'todos';
+        aplicarFiltros();
+    });
+}
+
+// Aplicar filtros a los registros cargados
 function aplicarFiltros() {
-    const rango = document.getElementById("filterRango").value;
-    const fechaEsp = document.getElementById("filterFechaEspecifica").value;
-    const busSel = document.getElementById("filterBus").value;
+    let resultados = [...todosLosRegistros];
 
-    const hoy = new Date();
-    
-    let filtrados = historialCompleto.filter(item => {
-        const fechaReg = new Date(item.fecha + "T00:00:00");
-        let pasaRango = true;
-
-        if (fechaEsp) {
-            pasaRango = item.fecha === fechaEsp;
-        } else if (rango === "dia") {
-            pasaRango = item.fecha === hoy.toISOString().split("T")[0];
-        } else if (rango === "semana") {
-            const haceUnaSemana = new Date();
-            haceUnaSemana.setDate(hoy.getDate() - 7);
-            pasaRango = fechaReg >= haceUnaSemana;
-        } else if (rango === "mes") {
-            pasaRango = fechaReg.getMonth() === hoy.getMonth() && fechaReg.getFullYear() === hoy.getFullYear();
-        } else if (rango === "anio") {
-            pasaRango = fechaReg.getFullYear() === hoy.getFullYear();
+    // Filtro por fecha específica
+    const fechaEsp = filterFechaEspecifica.value;
+    if (fechaEsp) {
+        resultados = resultados.filter(r => r.fecha === fechaEsp);
+    } else {
+        // Filtro por rango
+        const rango = filterRango.value;
+        const hoy = new Date();
+        
+        if (rango === 'dia') {
+            const hoyStr = hoy.toISOString().split('T')[0];
+            resultados = resultados.filter(r => r.fecha === hoyStr);
+        } else if (rango === 'semana') {
+            const haceSieteDias = new Date();
+            haceSieteDias.setDate(hoy.getDate() - 7);
+            resultados = resultados.filter(r => new Date(r.fecha) >= haceSieteDias);
+        } else if (rango === 'mes') {
+            const mesActual = hoy.toISOString().slice(0, 7); // YYYY-MM
+            resultados = resultados.filter(r => r.fecha && r.fecha.startsWith(mesActual));
+        } else if (rango === 'anio') {
+            const anioActual = hoy.getFullYear().toString();
+            resultados = resultados.filter(r => r.fecha && r.fecha.startsWith(anioActual));
         }
+    }
 
-        let pasaBus = true;
-        if (busSel !== "todos") {
-            pasaBus = Array.isArray(item.maquinas) && item.maquinas.includes(busSel);
-        }
+    // Filtro por Máquina
+    const maqFiltro = filterBus.value;
+    if (maqFiltro !== 'todos') {
+        resultados = resultados.filter(r => {
+            if (Array.isArray(r.maquinas)) {
+                return r.maquinas.includes(maqFiltro);
+            }
+            return r.maquina === maqFiltro;
+        });
+    }
 
-        return pasaRango && pasaBus;
-    });
-
-    renderizarTabla(filtrados);
+    window.registrosFiltrados = resultados;
+    totalResultados.innerText = `Registros encontrados: ${resultados.length}`;
+    renderizarTabla(resultados);
 }
 
-function limpiarFiltros() {
-    document.getElementById("filterRango").value = "todos";
-    document.getElementById("filterFechaEspecifica").value = "";
-    document.getElementById("filterBus").value = "todos";
-    renderizarTabla(historialCompleto);
-}
+// Renderizado de datos en la tabla HTML
+function renderizarTabla(registros) {
+    cuerpoTabla.innerHTML = '';
 
-// 8. Renderizado de Tabla Web
-function renderizarTabla(lista) {
-    const tbody = document.getElementById("cuerpoTabla");
-    const totalBadge = document.getElementById("totalResultados");
-
-    totalBadge.textContent = `Registros encontrados: ${lista.length}`;
-    tbody.innerHTML = "";
-
-    if (lista.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;">No hay reportes registrados para este filtro.</td></tr>`;
+    if (registros.length === 0) {
+        cuerpoTabla.innerHTML = `<tr><td colspan="10" style="text-align:center;">No se encontraron registros.</td></tr>`;
         return;
     }
 
-    lista.forEach(item => {
-        const tr = document.createElement("tr");
-        const maquinasTxt = Array.isArray(item.maquinas) ? item.maquinas.join(", ") : item.maquinas;
-        const evidenciaHTML = item.mediaTipo === "video" 
-            ? `<video src="${item.mediaUrl}" class="media-preview" controls></video>`
-            : `<a href="${item.mediaUrl}" target="_blank"><img src="${item.mediaUrl}" class="media-preview" alt="Evidencia"/></a>`;
+    registros.forEach(item => {
+        const tr = document.createElement('tr');
+
+        const maquinasTexto = Array.isArray(item.maquinas) 
+            ? item.maquinas.join(', ') 
+            : (item.maquina || 'N/R');
+
+        let mediaHtml = 'Sin evidencia';
+        if (item.mediaUrl) {
+            if (item.mediaType === 'video') {
+                mediaHtml = `<video src="${item.mediaUrl}" class="media-preview" controls preload="metadata"></video>`;
+            } else {
+                mediaHtml = `<a href="${item.mediaUrl}" target="_blank" rel="noopener noreferrer">
+                                <img src="${item.mediaUrl}" class="media-preview" alt="Evidencia" loading="lazy">
+                             </a>`;
+            }
+        }
 
         tr.innerHTML = `
-            <td>${item.fecha}</td>
-            <td>${item.hora}</td>
-            <td><strong>${maquinasTxt}</strong></td>
-            <td>${item.ruta}</td>
-            <td>${item.conductor}</td>
-            <td>${item.pasajerosSinPagar}</td>
-            <td>${item.lugar}</td>
-            <td>${item.descripcion}</td>
-            <td style="text-align:center;">${evidenciaHTML}</td>
+            <td>${item.fecha || ''}</td>
+            <td>${item.hora || ''}</td>
+            <td><strong>${maquinasTexto}</strong></td>
+            <td>${item.ruta || ''}</td>
+            <td>${item.conductor || 'N/R'}</td>
+            <td style="text-align:center;"><strong>${item.pasajerosSinPagar || 0}</strong></td>
+            <td>${item.lugar || ''}</td>
+            <td>${item.descripcion || ''}</td>
+            <td style="text-align:center;">${mediaHtml}</td>
             <td style="text-align:center;">
-                <button class="btn-danger" data-id="${item.id}">Borrar</button>
+                <button class="btn-danger" data-id="${item.id}">Eliminar</button>
             </td>
         `;
 
-        tr.querySelector(".btn-danger").addEventListener("click", () => eliminarRegistro(item.id));
-        tbody.appendChild(tr);
+        // Evento de eliminación
+        const btnEliminar = tr.querySelector('.btn-danger');
+        btnEliminar.addEventListener('click', () => eliminarRegistro(item));
+
+        cuerpoTabla.appendChild(tr);
     });
 }
 
-// 9. Eliminar Registro
-async function eliminarRegistro(id) {
-    if (confirm("¿Está seguro de que desea eliminar este reporte de la nube?")) {
-        try {
-            await deleteDoc(doc(db, "anomalias", id));
-        } catch (err) {
-            alert("Error al eliminar: " + err.message);
+// Eliminar Registro de Firestore y Storage
+async function eliminarRegistro(item) {
+    if (!confirm("¿Está seguro de que desea eliminar este registro y su archivo de evidencia?")) return;
+
+    try {
+        if (item.storagePath) {
+            const storageRef = ref(storage, item.storagePath);
+            await deleteObject(storageRef).catch(e => console.warn("Archivo no encontrado en storage:", e));
         }
+        await deleteDoc(doc(db, "anomalias", item.id));
+    } catch (err) {
+        console.error("Error al eliminar registro:", err);
+        alert("No se pudo eliminar el registro.");
     }
 }
 
-// 10. Helper robusto para procesar imágenes de Firebase a Base64
-async function urlABase64(url) {
-    try {
-        const respuesta = await fetch(url);
-        if (!respuesta.ok) return null;
 
-        const blob = await respuesta.blob();
+/* ==========================================================================
+   EXPORTACIÓN A EXCEL CON CONVERSIÓN DE IMÁGENES MEDIANTE CANVAS
+   Garantiza que cualquier formato de foto (JPG, WEBP, PNG) sea compatible
+   con cualquier versión de Microsoft Excel de escritorio.
+   ========================================================================== */
 
-        return new Promise((resolve) => {
-            const img = new Image();
-            img.src = URL.createObjectURL(blob);
+async function descargarEIncrustarImagen(url) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = "Anonymous"; // Permite lectura CORS
+        img.src = url;
 
-            img.onload = () => {
+        img.onload = () => {
+            try {
+                // Crear Canvas para normalizar el formato a un PNG universal
                 const canvas = document.createElement("canvas");
-                canvas.width = 120;
-                canvas.height = 90;
-                
+                canvas.width = img.naturalWidth || img.width;
+                canvas.height = img.naturalHeight || img.height;
+
                 const ctx = canvas.getContext("2d");
-                ctx.drawImage(img, 0, 0, 120, 90);
+                ctx.drawImage(img, 0, 0);
 
-                URL.revokeObjectURL(img.src);
-                resolve(canvas.toDataURL("image/jpeg", 0.8));
-            };
+                // Convertir Canvas a Data URL en formato PNG estándar
+                const dataURL = canvas.toDataURL("image/png");
 
-            img.onerror = () => {
-                URL.revokeObjectURL(img.src);
+                // Convertir DataURL Base64 a ArrayBuffer para la librería ExcelJS
+                const base64Data = dataURL.split(',')[1];
+                const binaryString = window.atob(base64Data);
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                resolve(bytes.buffer);
+            } catch (err) {
+                console.error("Error al procesar la imagen en el canvas:", err);
                 resolve(null);
-            };
-        });
-    } catch (error) {
-        console.warn("No se pudo obtener la imagen:", error);
-        return null;
-    }
+            }
+        };
+
+        img.onerror = (err) => {
+            console.error("Error de carga de imagen desde URL para Excel:", err);
+            resolve(null); // Evita romper la generación si una imagen falla
+        };
+    });
 }
 
-// 11. Exportación a Excel con Imágenes Compatibles
-async function exportarAExcelConImagenes() {
-    if (historialCompleto.length === 0) {
-        alert("No hay información suficiente para exportar.");
-        return;
-    }
-
-    const btnExportar = document.getElementById("btnExportar");
-    btnExportar.disabled = true;
-    btnExportar.textContent = "Generando Excel con fotos...";
+// Evento de Exportación a Excel
+btnExportar.addEventListener('click', async () => {
+    const textoOriginal = btnExportar.innerText;
 
     try {
-        let filasHTML = "";
+        const registrosAExportar = window.registrosFiltrados || [];
 
-        for (const item of historialCompleto) {
-            const maquinasTxt = Array.isArray(item.maquinas) ? item.maquinas.join(", ") : item.maquinas;
-            let celdaEvidencia = "Sin archivo";
+        if (registrosAExportar.length === 0) {
+            alert("No hay registros disponibles para exportar.");
+            return;
+        }
 
-            if (item.mediaUrl) {
-                if (item.mediaTipo === "video") {
-                    celdaEvidencia = `<a href="${item.mediaUrl}" target="_blank">Ver Video</a>`;
-                } else {
-                    // Intenta obtener Base64 mediante Blob de fetch
-                    const base64Img = await urlABase64(item.mediaUrl);
-                    
-                    if (base64Img) {
-                        celdaEvidencia = `<img src="${base64Img}" width="120" height="90" style="display:block; margin:auto;" />`;
-                    } else {
-                        // Resguardo en caso de que falle la descarga: renderizado por URL directa
-                        celdaEvidencia = `<img src="${item.mediaUrl}" width="120" height="90" style="display:block; margin:auto;" /><br><a href="${item.mediaUrl}" target="_blank">Ver Enlace</a>`;
+        btnExportar.innerText = "⏳ Generando Excel con fotos...";
+        btnExportar.disabled = true;
+
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Reporte Anomalías');
+
+        // Definición e Ancho de Columnas
+        worksheet.columns = [
+            { header: 'Fecha', key: 'fecha', width: 14 },
+            { header: 'Hora', key: 'hora', width: 10 },
+            { header: 'Máquina(s)', key: 'maquinas', width: 22 },
+            { header: 'Ruta Principal', key: 'ruta', width: 25 },
+            { header: 'Conductor', key: 'conductor', width: 22 },
+            { header: 'Pasajeros Sin Pagar', key: 'pasajeros', width: 20 },
+            { header: 'Lugar / Parada', key: 'lugar', width: 25 },
+            { header: 'Descripción', key: 'descripcion', width: 38 },
+            { header: 'Evidencia (Foto)', key: 'evidencia', width: 24 }
+        ];
+
+        // Estilos del Encabezado
+        const headerRow = worksheet.getRow(1);
+        headerRow.font = { bold: true, color: { argb: 'FFFFFF' }, size: 11 };
+        headerRow.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: '003366' } // Azul corporativo
+        };
+        headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+        headerRow.height = 25;
+
+        // Recorrer e Insertar Registros
+        for (let i = 0; i < registrosAExportar.length; i++) {
+            const item = registrosAExportar[i];
+            const rowIndex = i + 2; // Fila 1 es encabezado
+
+            const maquinasTexto = Array.isArray(item.maquinas) 
+                ? item.maquinas.join(', ') 
+                : (item.maquina || 'N/R');
+
+            worksheet.addRow({
+                fecha: item.fecha || '',
+                hora: item.hora || '',
+                maquinas: maquinasTexto,
+                ruta: item.ruta || '',
+                conductor: item.conductor || 'N/R',
+                pasajeros: item.pasajerosSinPagar || 0,
+                lugar: item.lugar || '',
+                descripcion: item.descripcion || '',
+                evidencia: (item.mediaType === 'video') ? '[Evidencia en Video]' : ''
+            });
+
+            const row = worksheet.getRow(rowIndex);
+            row.height = 80; // Altura para espacio de la imagen
+            row.alignment = { vertical: 'middle', wrapText: true };
+
+            // Descargar e incrustar la imagen si no es video
+            if (item.mediaUrl && item.mediaType !== 'video') {
+                try {
+                    const imageBuffer = await descargarEIncrustarImagen(item.mediaUrl);
+
+                    if (imageBuffer) {
+                        const imageId = workbook.addImage({
+                            buffer: imageBuffer,
+                            extension: 'png', // Fuerza compatibilidad universal
+                        });
+
+                        worksheet.addImage(imageId, {
+                            tl: { col: 8, row: rowIndex - 1 },
+                            ext: { width: 130, height: 95 },
+                            editAs: 'oneCell'
+                        });
                     }
+                } catch (imgErr) {
+                    console.error("No se pudo adjuntar la foto en la fila " + rowIndex, imgErr);
                 }
             }
-
-            filasHTML += `
-                <tr style="height: 95px;">
-                    <td style="vertical-align: middle; text-align: center;">${item.fecha || ''}</td>
-                    <td style="vertical-align: middle; text-align: center;">${item.hora || ''}</td>
-                    <td style="vertical-align: middle; text-align: center;">${maquinasTxt || ''}</td>
-                    <td style="vertical-align: middle; text-align: center;">${item.ruta || ''}</td>
-                    <td style="vertical-align: middle; text-align: center;">${item.conductor || ''}</td>
-                    <td style="vertical-align: middle; text-align: center;">${item.pasajerosSinPagar ?? 0}</td>
-                    <td style="vertical-align: middle; text-align: center;">${item.lugar || ''}</td>
-                    <td style="vertical-align: middle; text-align: left;">${item.descripcion || ''}</td>
-                    <td style="text-align: center; vertical-align: middle;">${celdaEvidencia}</td>
-                </tr>
-            `;
         }
 
-        const excelHTML = `
-            <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-            <head>
-                <meta charset="utf-8">
-                <!--[if gte mso 9]>
-                <xml>
-                    <x:ExcelWorkbook>
-                        <x:ExcelWorksheets>
-                            <x:ExcelWorksheet>
-                                <x:Name>Anomalías Buses Tarapacá</x:Name>
-                                <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
-                            </x:ExcelWorksheet>
-                        </x:ExcelWorksheets>
-                    </x:ExcelWorkbook>
-                </xml>
-                <![endif]-->
-                <style>
-                    table { border-collapse: collapse; width: 100%; }
-                    th { background-color: #003366; color: white; border: 1px solid #000; padding: 8px; font-weight: bold; }
-                    td { border: 1px solid #ccc; padding: 5px; }
-                </style>
-            </head>
-            <body>
-                <h2>Reporte de Anomalías Operativas - Buses Tarapacá</h2>
-                <p><strong>Fecha de Generación:</strong> ${new Date().toLocaleString()}</p>
-                <table border="1">
-                    <thead>
-                        <tr>
-                            <th>Fecha</th>
-                            <th>Hora</th>
-                            <th>Máquina(s)</th>
-                            <th>Ruta Principal</th>
-                            <th>Conductor</th>
-                            <th>Pasajeros Sin Pagar</th>
-                            <th>Lugar / Parada</th>
-                            <th>Descripción</th>
-                            <th style="width: 130px;">Evidencia Fotográfica</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${filasHTML}
-                    </tbody>
-                </table>
-            </body>
-            </html>
-        `;
-
-        const blob = new Blob(['\ufeff' + excelHTML], { type: "application/vnd.ms-excel;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `Reporte_Anomalias_Tarapaca_${new Date().toISOString().split("T")[0]}.xls`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        // Descarga del Archivo Excel en el Navegador
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `Reporte_Anomalias_${new Date().toISOString().slice(0,10)}.xlsx`;
+        link.click();
+        URL.revokeObjectURL(link.href);
 
     } catch (err) {
-        console.error("Error al exportar:", err);
-        alert("Ocurrió un error al procesar las imágenes para Excel.");
+        console.error("Error en proceso de exportación a Excel:", err);
+        alert("Ocurrió un error al intentar generar el archivo Excel.");
     } finally {
+        btnExportar.innerText = textoOriginal;
         btnExportar.disabled = false;
-        btnExportar.textContent = "Exportar a Excel";
     }
-}
-
-// 12. Service Worker
-function registrarServiceWorker() {
-    if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.register("./sw.js")
-            .then(reg => console.log("Service Worker registrado con éxito:", reg.scope))
-            .catch(err => console.warn("Error al registrar Service Worker:", err));
-    }
-}
+});
