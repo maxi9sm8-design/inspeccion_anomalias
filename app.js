@@ -314,28 +314,39 @@ async function eliminarRegistro(item) {
 
 
 /* ==========================================================================
-   EXPORTACIÓN A EXCEL CON CONVERSIÓN DE IMÁGENES MEDIANTE CANVAS
-   Garantiza que cualquier formato de foto (JPG, WEBP, PNG) sea compatible
-   con cualquier versión de Microsoft Excel de escritorio.
+   EXPORTACIÓN A EXCEL COMPATIBLE CON PC (TODAS LAS VERSIONES) E IPHONE (iOS)
+   1. Descarga la imagen y redimensiona a máximo 600px de ancho.
+   2. Convierte la imagen a un PNG ligero universal usando HTML5 Canvas.
+   3. Evita pantallas negras en iPhone y celdas transparentes en Excel antiguo.
    ========================================================================== */
 
 async function descargarEIncrustarImagen(url) {
     return new Promise((resolve) => {
         const img = new Image();
-        img.crossOrigin = "Anonymous"; // Permite lectura CORS
+        img.crossOrigin = "Anonymous"; // Permite lectura CORS desde Firebase
         img.src = url;
 
         img.onload = () => {
             try {
-                // Crear Canvas para normalizar el formato a un PNG universal
                 const canvas = document.createElement("canvas");
-                canvas.width = img.naturalWidth || img.width;
-                canvas.height = img.naturalHeight || img.height;
+                
+                // Reducir la resolución a un máximo de 600px para mantener el Excel ligero (ideal para iPhone)
+                const MAX_WIDTH = 600;
+                let width = img.naturalWidth || img.width;
+                let height = img.naturalHeight || img.height;
+
+                if (width > MAX_WIDTH) {
+                    height = Math.round((height * MAX_WIDTH) / width);
+                    width = MAX_WIDTH;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
 
                 const ctx = canvas.getContext("2d");
-                ctx.drawImage(img, 0, 0);
+                ctx.drawImage(img, 0, 0, width, height);
 
-                // Convertir Canvas a Data URL en formato PNG estándar
+                // Convertir Canvas a Data URL en formato PNG estandarizado
                 const dataURL = canvas.toDataURL("image/png");
 
                 // Convertir DataURL Base64 a ArrayBuffer para la librería ExcelJS
@@ -348,14 +359,14 @@ async function descargarEIncrustarImagen(url) {
                 }
                 resolve(bytes.buffer);
             } catch (err) {
-                console.error("Error al procesar la imagen en el canvas:", err);
+                console.error("Error procesando imagen para el Excel:", err);
                 resolve(null);
             }
         };
 
         img.onerror = (err) => {
-            console.error("Error de carga de imagen desde URL para Excel:", err);
-            resolve(null); // Evita romper la generación si una imagen falla
+            console.error("Error de carga de la imagen desde URL:", err);
+            resolve(null); // Si falla la carga, continua el reporte sin la imagen
         };
     });
 }
@@ -372,13 +383,13 @@ btnExportar.addEventListener('click', async () => {
             return;
         }
 
-        btnExportar.innerText = "⏳ Generando Excel con fotos...";
+        btnExportar.innerText = "⏳ Generando Excel optimizado...";
         btnExportar.disabled = true;
 
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Reporte Anomalías');
 
-        // Definición e Ancho de Columnas
+        // Definición de Ancho de Columnas
         worksheet.columns = [
             { header: 'Fecha', key: 'fecha', width: 14 },
             { header: 'Hora', key: 'hora', width: 10 },
@@ -405,7 +416,7 @@ btnExportar.addEventListener('click', async () => {
         // Recorrer e Insertar Registros
         for (let i = 0; i < registrosAExportar.length; i++) {
             const item = registrosAExportar[i];
-            const rowIndex = i + 2; // Fila 1 es encabezado
+            const rowIndex = i + 2; // Fila 1 es el encabezado
 
             const maquinasTexto = Array.isArray(item.maquinas) 
                 ? item.maquinas.join(', ') 
@@ -424,10 +435,10 @@ btnExportar.addEventListener('click', async () => {
             });
 
             const row = worksheet.getRow(rowIndex);
-            row.height = 80; // Altura para espacio de la imagen
+            row.height = 80; // Altura para dar espacio a la foto en la celda
             row.alignment = { vertical: 'middle', wrapText: true };
 
-            // Descargar e incrustar la imagen si no es video
+            // Descargar e incrustar la imagen si el registro cuenta con ella
             if (item.mediaUrl && item.mediaType !== 'video') {
                 try {
                     const imageBuffer = await descargarEIncrustarImagen(item.mediaUrl);
@@ -435,7 +446,7 @@ btnExportar.addEventListener('click', async () => {
                     if (imageBuffer) {
                         const imageId = workbook.addImage({
                             buffer: imageBuffer,
-                            extension: 'png', // Fuerza compatibilidad universal
+                            extension: 'png', // Fuerza formato PNG compatible
                         });
 
                         worksheet.addImage(imageId, {
@@ -460,7 +471,7 @@ btnExportar.addEventListener('click', async () => {
         URL.revokeObjectURL(link.href);
 
     } catch (err) {
-        console.error("Error en proceso de exportación a Excel:", err);
+        console.error("Error en el proceso de exportación:", err);
         alert("Ocurrió un error al intentar generar el archivo Excel.");
     } finally {
         btnExportar.innerText = textoOriginal;
