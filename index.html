@@ -3,182 +3,152 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control de Anomalías - Buses Tarapacá</title>
-
-    <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#003366">
-
+    <title>Registro de Control de Pasajeros</title>
+    <!-- CSS Estilos Integrados -->
     <style>
-        :root {
-            --primary: #003366;
-            --secondary: #d9534f;
-            --light: #f8f9fa;
-            --dark: #212529;
-            --border: #cccccc;
+        * {
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
         }
 
         body {
-            font-family: Arial, sans-serif;
-            margin: 0;
+            background-color: #f4f7f6;
+            color: #333;
             padding: 20px;
-            background-color: #f0f2f5;
-            color: var(--dark);
         }
 
         .container {
-            max-width: 1150px;
+            max-width: 1200px;
             margin: 0 auto;
-            background: white;
+            background: #fff;
             padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
 
         h1, h2 {
-            color: var(--primary);
             text-align: center;
+            margin-bottom: 20px;
+            color: #1a252f;
         }
 
-        .form-group {
-            margin-bottom: 15px;
+        .form-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            margin-bottom: 30px;
         }
 
-        .form-row {
+        .grid-form {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 15px;
         }
 
-        label {
-            display: block;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-
-        input[type="text"],
-        input[type="number"],
-        input[type="time"],
-        input[type="date"],
-        select,
-        textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid var(--border);
-            border-radius: 5px;
-            box-sizing: border-box;
-            font-size: 14px;
-        }
-
-        textarea {
-            resize: vertical;
-            height: 80px;
-        }
-
-        .machines-selector {
+        .form-group {
             display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            background: #f8f9fa;
+            flex-direction: column;
+        }
+
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 6px;
+            font-size: 14px;
+            color: #495057;
+        }
+
+        input, select, textarea {
             padding: 10px;
-            border: 1px solid var(--border);
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            border-color: #007bff;
+        }
+
+        /* Selector múltiple de máquinas */
+        .maquinas-checkbox-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 8px;
+            background: #fff;
+            padding: 12px;
+            border: 1px solid #ced4da;
             border-radius: 6px;
             max-height: 180px;
             overflow-y: auto;
         }
 
-        .chip-btn {
-            background-color: #e9ecef;
-            border: 1px solid #ced4da;
-            border-radius: 20px;
-            padding: 6px 14px;
+        .chk-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
             font-size: 13px;
-            font-weight: bold;
             cursor: pointer;
-            user-select: none;
-            transition: all 0.15s ease;
         }
 
-        .chip-btn.selected {
-            background-color: var(--primary);
-            color: white;
-            border-color: var(--primary);
-        }
-
-        .btn {
-            background-color: var(--primary);
-            color: white;
-            padding: 12px 20px;
-            border: none;
-            border-radius: 5px;
+        .chk-item input {
             cursor: pointer;
-            font-size: 16px;
-            width: 100%;
-            font-weight: bold;
         }
 
-        .btn:hover {
-            background-color: #002244;
-        }
-
-        .btn-download {
+        .btn-submit {
+            grid-column: 1 / -1;
             background-color: #28a745;
-            width: auto;
+            color: white;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 10px;
         }
 
-        .btn-download:hover {
+        .btn-submit:hover {
             background-color: #218838;
         }
 
-        .btn-danger {
-            background-color: var(--secondary);
-            padding: 6px 12px;
-            font-size: 13px;
+        .btn-export {
+            background-color: #17a2b8;
             color: white;
+            padding: 10px 20px;
             border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .history-section {
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 2px solid var(--primary);
-        }
-
-        .filter-card {
-            background-color: #eef2f7;
-            padding: 18px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border: 1px solid #d0d7de;
-        }
-
-        .filter-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 15px;
-            align-items: end;
-        }
-
-        .summary-bar {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .summary-badge {
-            background-color: var(--primary);
-            color: white;
-            padding: 8px 15px;
-            border-radius: 20px;
+            border-radius: 6px;
             font-size: 14px;
             font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 15px;
+            display: inline-block;
         }
 
-        .table-wrapper {
+        .btn-export:hover {
+            background-color: #138496;
+        }
+
+        .filters-section {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 20px;
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .table-container {
             overflow-x: auto;
         }
 
@@ -186,174 +156,225 @@
             width: 100%;
             border-collapse: collapse;
             margin-top: 10px;
-            font-size: 13px;
+            font-size: 14px;
         }
 
         th, td {
-            border: 1px solid var(--border);
-            padding: 8px;
+            border: 1px solid #dee2e6;
+            padding: 12px;
             text-align: left;
             vertical-align: middle;
         }
 
         th {
-            background-color: var(--primary);
+            background-color: #343a40;
             color: white;
-            white-space: nowrap;
+            font-weight: 600;
         }
 
-        .media-preview {
-            max-width: 140px;
-            max-height: 100px;
-            object-fit: cover;
-            border-radius: 6px;
-            display: block;
-            margin: auto;
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
         }
 
-        .status-msg {
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+
+        /* Modal / Overlay de Login */
+        #loginOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .login-card {
+            background: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
             text-align: center;
-            font-weight: bold;
-            color: var(--primary);
-            margin-top: 10px;
-            padding: 10px;
-            border-radius: 5px;
+        }
+
+        /* Barra Usuario Activo */
+        #userInfo {
+            display: none;
+            justify-content: space-between;
+            align-items: center;
+            background: #e2e3e5;
+            padding: 10px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #d6d8db;
         }
 
         @media (max-width: 768px) {
-            .filter-grid {
+            .grid-form {
                 grid-template-columns: 1fr;
             }
-            .btn-download {
-                width: 100%;
+            .filters-section {
+                flex-direction: column;
+                align-items: stretch;
             }
         }
     </style>
+
+    <!-- Librería ExcelJS para incrustar fotos reales en archivos .xlsx -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
 </head>
 <body>
 
-<div class="container">
-    <h1>🚌 Control de Anomalías - Buses Tarapacá (Nube)</h1>
-
-    <form id="anomaliaForm">
-        <div class="form-group">
-            <label>Seleccione Máquina(s): <small style="font-weight:normal; color:#666;">(Puede marcar varias a la vez)</small></label>
-            <div class="machines-selector" id="maquinasContainer"></div>
-        </div>
-
-        <div class="form-row">
-            <div class="form-group">
-                <label for="rutaInput">Ruta Principal:</label>
-                <input type="text" id="rutaInput" placeholder="Ej: Iquique - Alto Hospicio" required>
-            </div>
-            <div class="form-group">
-                <label for="conductorInput">Nombre Conductor:</label>
-                <input type="text" id="conductorInput" placeholder="Ej: Juan Pérez (Opcional)">
-            </div>
-        </div>
-
-        <div class="form-row">
-            <div class="form-group">
-                <label for="fechaInput">Fecha:</label>
-                <input type="date" id="fechaInput" required>
-            </div>
-            <div class="form-group">
-                <label for="horaInput">Hora del Evento:</label>
-                <input type="time" id="horaInput" required>
-            </div>
-            <div class="form-group">
-                <label for="pasajerosInput">Pasajeros sin Pagar:</label>
-                <input type="number" id="pasajerosInput" min="0" value="0" required>
-            </div>
-        </div>
-
-        <div class="form-group">
-            <label for="lugarInput">Lugar / Comuna / Parada:</label>
-            <input type="text" id="lugarInput" placeholder="Ej: Cruce Pozo Almonte, Sector Terminal..." required>
-        </div>
-
-        <div class="form-group">
-            <label for="descripcionInput">Descripción de la Anomalía:</label>
-            <textarea id="descripcionInput" placeholder="Detalle qué sucedió..." required></textarea>
-        </div>
-
-        <div class="form-group">
-            <label for="mediaInput">Foto o Video de Evidencia:</label>
-            <input type="file" id="mediaInput" accept="image/*,video/*" required>
-        </div>
-
-        <button type="submit" id="btnGuardar" class="btn">☁️ Guardar en la Nube</button>
-        <div id="statusMsg" class="status-msg"></div>
-    </form>
-
-    <div class="history-section">
-        <h2>🔍 Historial de Reportes en Tiempo Real</h2>
-
-        <div class="filter-card">
-            <div class="filter-grid">
-                <div>
-                    <label for="filterRango">Filtrar por Rango:</label>
-                    <select id="filterRango">
-                        <option value="todos">Todos los registros</option>
-                        <option value="dia">Hoy (Día)</option>
-                        <option value="semana">Esta Semana</option>
-                        <option value="mes">Este Mes</option>
-                        <option value="anio">Este Año</option>
-                    </select>
+    <!-- MODAL DE AUTENTICACIÓN / LOGIN -->
+    <div id="loginOverlay">
+        <div class="login-card">
+            <h2>Acceso al Sistema</h2>
+            <p style="color: #6c757d; margin-bottom: 20px; font-size: 14px;">Inicia sesión con tu cuenta de Firebase</p>
+            <form id="formLogin">
+                <div class="form-group" style="text-align: left; margin-bottom: 15px;">
+                    <label>Correo Electrónico:</label>
+                    <input type="email" id="loginEmail" placeholder="usuario@correo.com" required>
                 </div>
-
-                <div>
-                    <label for="filterFechaEspecifica">O Fecha Específica:</label>
-                    <input type="date" id="filterFechaEspecifica">
+                <div class="form-group" style="text-align: left; margin-bottom: 20px;">
+                    <label>Contraseña:</label>
+                    <input type="password" id="loginPassword" placeholder="••••••••" required>
                 </div>
-
-                <div>
-                    <label for="filterBus">Filtrar por Máquina:</label>
-                    <select id="filterBus">
-                        <option value="todos">Todas las máquinas</option>
-                    </select>
-                </div>
-
-                <div>
-                    <button id="btnLimpiar" class="btn" style="background-color: #6c757d;">Limpiar Filtros</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="summary-bar">
-            <span class="summary-badge" id="totalResultados">Registros encontrados: 0</span>
-            <button id="btnExportar" class="btn btn-download">📊 Exportar Filtro a Excel</button>
-        </div>
-
-        <div class="table-wrapper">
-            <table id="tablaAnomalias">
-                <thead>
-                    <tr>
-                        <th>Fecha</th>
-                        <th>Hora</th>
-                        <th>Máquina(s)</th>
-                        <th>Ruta Principal</th>
-                        <th>Conductor</th>
-                        <th>Pasajeros Sin Pagar</th>
-                        <th>Lugar / Parada</th>
-                        <th>Descripción</th>
-                        <th>Evidencia</th>
-                        <th>Acción</th>
-                    </tr>
-                </thead>
-                <tbody id="cuerpoTabla">
-                    <tr><td colspan="10" style="text-align:center;">Cargando historial desde la nube...</td></tr>
-                </tbody>
-            </table>
+                <button type="submit" class="btn-submit" style="margin-top:0;">Iniciar Sesión</button>
+                <p id="loginError" style="color: red; margin-top: 15px; display: none; font-size: 14px;"></p>
+            </form>
         </div>
     </div>
-</div>
 
-<!-- Librería ExcelJS para generación nativa de .xlsx con imágenes -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <div class="container">
+        <!-- BARRA SUPERIOR DE USUARIO -->
+        <div id="userInfo">
+            <span>Usuario activo: <strong id="userEmailSpan"></strong></span>
+            <button id="btnCerrarSesion" class="btn-danger">Cerrar Sesión</button>
+        </div>
 
-<!-- Script principal de la aplicación -->
-<script src="./app.js" type="module"></script>
+        <h1>Sistema de Registro de Control de Pasajeros</h1>
 
+        <!-- FORMULARIO DE INGRESO -->
+        <section class="form-section">
+            <h2>Nuevo Registro de Inspección</h2>
+            <form id="formRegistro">
+                <div class="grid-form">
+                    <div class="form-group">
+                        <label for="fecha">Fecha:</label>
+                        <input type="date" id="fecha" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="hora">Hora:</label>
+                        <input type="time" id="hora" required>
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label>Máquina(s) Inspeccionada(s):</label>
+                        <div id="maquinasContainer" class="maquinas-checkbox-container">
+                            <!-- Se llena dinámicamente con las 21 máquinas desde JS -->
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="ruta">Ruta / Tramo:</label>
+                        <input type="text" id="ruta" placeholder="Ej: Centro - Norte" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="conductor">Nombre / ID Conductor:</label>
+                        <input type="text" id="conductor" placeholder="Ej: Juan Pérez">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="pasajerosSinPagar">Pasajeros Sin Pagar:</label>
+                        <input type="number" id="pasajerosSinPagar" min="0" value="0" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="lugar">Lugar / Paradero:</label>
+                        <input type="text" id="lugar" placeholder="Ej: Av. Principal con Calle 5">
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label for="mediaInput">Evidencia (Foto o Video):</label>
+                        <input type="file" id="mediaInput" accept="image/*,video/*">
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label for="descripcion">Observaciones / Comentarios:</label>
+                        <textarea id="descripcion" rows="3" placeholder="Detalle adicional del control..."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn-submit" id="btnGuardar">Guardar Registro</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- FILTROS Y REGISTROS -->
+        <section>
+            <h2>Registros Almacenados</h2>
+            <div class="filters-section">
+                <div class="form-group">
+                    <label for="filtroMaquina">Filtrar por Máquina:</label>
+                    <select id="filtroMaquina">
+                        <option value="TODAS">Todas las Máquinas</option>
+                        <!-- Se llena dinámicamente desde JS -->
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="filtroFecha">Filtrar por Fecha:</label>
+                    <input type="date" id="filtroFecha">
+                </div>
+
+                <button id="btnLimpiarFiltros" style="padding: 10px 15px; background:#6c757d; color:white; border:none; border-radius:6px; cursor:pointer;">Limpiar Filtros</button>
+                <button id="btnExportarExcel" class="btn-export">Exportar a Excel (.xlsx con Fotos)</button>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Hora</th>
+                            <th>Máquina(s)</th>
+                            <th>Ruta</th>
+                            <th>Conductor</th>
+                            <th>Sin Pagar</th>
+                            <th>Lugar</th>
+                            <th>Observaciones</th>
+                            <th>Evidencia</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cuerpoTabla">
+                        <tr>
+                            <td colspan="10" style="text-align: center;">Cargando registros...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <!-- Módulo Principal de JavaScript -->
+    <script type="module" src="app.js"></script>
 </body>
 </html>
