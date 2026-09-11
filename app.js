@@ -120,7 +120,7 @@ anomaliaForm.addEventListener('submit', async (e) => {
         const fileExt = mediaFile.name.split('.').pop();
         const fileName = `evidencias/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const storageRef = ref(storage, fileName);
-        
+         
         await uploadBytes(storageRef, mediaFile);
         const mediaUrl = await getDownloadURL(storageRef);
         const isVideo = mediaFile.type.startsWith('video');
@@ -163,7 +163,7 @@ anomaliaForm.addEventListener('submit', async (e) => {
 // Escuchar cambios en tiempo real desde Firestore
 function escucharFirestore() {
     const q = query(collection(db, "anomalias"), orderBy("creadoEl", "desc"));
-    
+     
     onSnapshot(q, (snapshot) => {
         todosLosRegistros = [];
         snapshot.forEach((docSnap) => {
@@ -211,7 +211,7 @@ function aplicarFiltros() {
     } else {
         const rango = filterRango.value;
         const hoy = new Date();
-        
+         
         if (rango === 'dia') {
             const hoyStr = hoy.toISOString().split('T')[0];
             resultados = resultados.filter(r => r.fecha === hoyStr);
@@ -256,8 +256,8 @@ function renderizarTabla(registros) {
         const tr = document.createElement('tr');
 
         const maquinasTexto = Array.isArray(item.maquinas) 
-            ? item.maquinas.map(m => `Maq ${m}`).join(', ') 
-            : `Maq ${item.maquina || 'N/R'}`;
+            ? item.maquinas.map(m => `Máquina ${m}`).join(', ') 
+            : `Máquina ${item.maquina || 'N/R'}`;
 
         let mediaHtml = 'Sin evidencia';
         if (item.mediaUrl) {
@@ -322,7 +322,7 @@ async function descargarEIncrustarImagen(url) {
         img.onload = () => {
             try {
                 const canvas = document.createElement("canvas");
-                
+                 
                 // Limitar tamaño máximo a 600px para que abra rápido en celulares y no consuma RAM excesiva
                 const MAX_WIDTH = 600;
                 let width = img.naturalWidth || img.width;
@@ -391,7 +391,7 @@ btnExportar.addEventListener('click', async () => {
             { header: 'Pasajeros Sin Pagar', key: 'pasajeros', width: 20 },
             { header: 'Lugar / Parada', key: 'lugar', width: 25 },
             { header: 'Descripción', key: 'descripcion', width: 38 },
-            { header: 'Evidencia (Foto)', key: 'evidencia', width: 24 }
+            { header: 'Evidencia', key: 'evidencia', width: 24 }
         ];
 
         // Encabezado
@@ -405,14 +405,19 @@ btnExportar.addEventListener('click', async () => {
         headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
         headerRow.height = 25;
 
-        // Agregar filas e incrustar imágenes
+        // Agregar filas e incrustar imágenes/videos
         for (let i = 0; i < registrosAExportar.length; i++) {
             const item = registrosAExportar[i];
             const rowIndex = i + 2;
 
             const maquinasTexto = Array.isArray(item.maquinas) 
-                ? item.maquinas.map(m => `Maq ${m}`).join(', ') 
-                : `Maq ${item.maquina || 'N/R'}`;
+                ? item.maquinas.map(m => `Máquina ${m}`).join(', ') 
+                : `Máquina ${item.maquina || 'N/R'}`;
+
+            let textoEvidencia = '';
+            if (item.mediaUrl) {
+                textoEvidencia = item.mediaType === 'video' ? '🎥 Reproducir Video' : 'Ver Imagen';
+            }
 
             worksheet.addRow({
                 fecha: item.fecha || '',
@@ -423,15 +428,26 @@ btnExportar.addEventListener('click', async () => {
                 pasajeros: item.pasajerosSinPagar || 0,
                 lugar: item.lugar || '',
                 descripcion: item.descripcion || '',
-                evidencia: (item.mediaType === 'video') ? '[Evidencia en Video]' : ''
+                evidencia: textoEvidencia
             });
 
             const row = worksheet.getRow(rowIndex);
             row.height = 80;
-            row.alignment = { vertical: 'middle', wrapText: true };
+            // Alineación centrada para todas las celdas de las filas de datos
+            row.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
 
-            // Si es imagen, se incrusta en el archivo .xlsx
-            if (item.mediaUrl && item.mediaType !== 'video') {
+            // Si es un video, colocar hipervínculo funcional
+            if (item.mediaUrl && item.mediaType === 'video') {
+                const cell = row.getCell('evidencia');
+                cell.value = {
+                    text: '🎥 Reproducir Video',
+                    hyperlink: item.mediaUrl,
+                    tooltip: 'Haz clic para ver el video en la nube'
+                };
+                cell.font = { color: { argb: '0000FF' }, underline: true };
+            } 
+            // Si es imagen, se incrusta visualmente
+            else if (item.mediaUrl && item.mediaType !== 'video') {
                 try {
                     const imageBuffer = await descargarEIncrustarImagen(item.mediaUrl);
 
