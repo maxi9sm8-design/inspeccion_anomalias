@@ -34,6 +34,24 @@
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
 
+        /* App principal oculta hasta iniciar sesión */
+        #appContainer {
+            display: none;
+        }
+
+        .app-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .app-header h1 {
+            flex: 1;
+            margin: 0;
+        }
+
         h1, h2 {
             color: var(--primary);
             text-align: center;
@@ -59,6 +77,8 @@
         input[type="number"],
         input[type="time"],
         input[type="date"],
+        input[type="email"],
+        input[type="password"],
         select,
         textarea {
             width: 100%;
@@ -127,6 +147,17 @@
 
         .btn-download:hover {
             background-color: #218838;
+        }
+
+        .btn-logout {
+            background-color: #6c757d;
+            width: auto;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .btn-logout:hover {
+            background-color: #565e64;
         }
 
         .btn-danger {
@@ -220,6 +251,27 @@
             border-radius: 5px;
         }
 
+        /* Pantalla de inicio de sesión */
+        .login-overlay {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 80vh;
+        }
+
+        .login-box {
+            background: white;
+            padding: 35px 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 380px;
+        }
+
+        .login-box h2 {
+            margin-top: 0;
+        }
+
         @media (max-width: 768px) {
             .filter-grid {
                 grid-template-columns: 1fr;
@@ -232,8 +284,32 @@
 </head>
 <body>
 
-<div class="container">
-    <h1>🚌 Control de Anomalías - Buses Tarapacá (Nube)</h1>
+<!-- Pantalla de Inicio de Sesión -->
+<div id="loginOverlay" class="login-overlay">
+    <div class="login-box">
+        <h2>🔒 Acceso Restringido</h2>
+        <p style="text-align:center; color:#666;">Ingrese su correo y contraseña para continuar</p>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="loginEmail">Correo:</label>
+                <input type="email" id="loginEmail" required autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label for="loginPassword">Contraseña:</label>
+                <input type="password" id="loginPassword" required autocomplete="current-password">
+            </div>
+            <div id="loginError" style="color:#d9534f; text-align:center; font-weight:bold; margin-bottom:10px;"></div>
+            <button type="submit" id="btnLoginSubmit" class="btn">Ingresar</button>
+        </form>
+    </div>
+</div>
+
+<!-- Aplicación Principal (oculta hasta iniciar sesión) -->
+<div class="container" id="appContainer">
+    <div class="app-header">
+        <h1>🚌 Control de Anomalías - Buses Tarapacá (Nube)</h1>
+        <button id="btnLogout" class="btn btn-logout">Cerrar Sesión</button>
+    </div>
 
     <form id="anomaliaForm">
         <div class="form-group">
