@@ -6,6 +6,9 @@ import {
 import { 
     getStorage, ref, uploadBytes, getDownloadURL, deleteObject 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+import {
+    getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 // 1. Configuración de Firebase con tu API Key real
 const firebaseConfig = {
@@ -21,6 +24,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const storage = getStorage(app);
+const auth = getAuth(app);
 
 // Lista exacta de Máquinas / Equipos
 const LISTA_MAQUINAS = [
@@ -32,9 +36,10 @@ const LISTA_MAQUINAS = [
 // Variables globales de estado
 let maquinasSeleccionadas = [];
 let todosLosRegistros = [];
+let appIniciada = false;
 window.registrosFiltrados = [];
 
-// Elementos del DOM
+// Elementos del DOM - App principal
 const maquinasContainer = document.getElementById('maquinasContainer');
 const anomaliaForm = document.getElementById('anomaliaForm');
 const fechaInput = document.getElementById('fechaInput');
@@ -49,13 +54,73 @@ const filterBus = document.getElementById('filterBus');
 const btnLimpiar = document.getElementById('btnLimpiar');
 const btnExportar = document.getElementById('btnExportar');
 
-// Inicialización de la App
-document.addEventListener('DOMContentLoaded', () => {
-    inicializarFormulario();
-    renderizarChipsMaquinas();
-    escucharFirestore();
-    configurarFiltros();
+// Elementos del DOM - Login / Autenticación
+const loginOverlay = document.getElementById('loginOverlay');
+const appContainer = document.getElementById('appContainer');
+const loginForm = document.getElementById('loginForm');
+const loginEmail = document.getElementById('loginEmail');
+const loginPassword = document.getElementById('loginPassword');
+const loginError = document.getElementById('loginError');
+const btnLoginSubmit = document.getElementById('btnLoginSubmit');
+const btnLogout = document.getElementById('btnLogout');
+
+/* ==========================================================================
+   MÓDULO DE AUTENTICACIÓN
+   ========================================================================== */
+
+// Escuchar cambios de sesión: controla qué se muestra (login o app)
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        loginOverlay.style.display = 'none';
+        appContainer.style.display = 'block';
+
+        // Inicializar la app solo la primera vez que hay sesión activa
+        if (!appIniciada) {
+            appIniciada = true;
+            inicializarFormulario();
+            renderizarChipsMaquinas();
+            escucharFirestore();
+            configurarFiltros();
+        }
+    } else {
+        appContainer.style.display = 'none';
+        loginOverlay.style.display = 'flex';
+    }
 });
+
+// Manejar el envío del formulario de login
+loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    loginError.innerText = '';
+
+    const email = loginEmail.value.trim();
+    const password = loginPassword.value;
+
+    btnLoginSubmit.disabled = true;
+    btnLoginSubmit.innerText = 'Ingresando...';
+
+    try {
+        await signInWithEmailAndPassword(auth, email, password);
+        loginPassword.value = '';
+    } catch (error) {
+        console.error("Error de autenticación:", error);
+        loginError.innerText = 'Correo o contraseña incorrectos.';
+    } finally {
+        btnLoginSubmit.disabled = false;
+        btnLoginSubmit.innerText = 'Ingresar';
+    }
+});
+
+// Cerrar sesión
+if (btnLogout) {
+    btnLogout.addEventListener('click', async () => {
+        try {
+            await signOut(auth);
+        } catch (error) {
+            console.error("Error al cerrar sesión:", error);
+        }
+    });
+}
 
 // Ajustar fecha y hora actual por defecto
 function inicializarFormulario() {
@@ -435,6 +500,18 @@ btnExportar.addEventListener('click', async () => {
             row.height = 80;
             // Alineación centrada para todas las celdas de las filas de datos
             row.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+
+            // Si hay 1 o más pasajeros sin pagar, pintar toda la fila de amarillo
+            const pasajerosSinPagar = item.pasajerosSinPagar || 0;
+            if (pasajerosSinPagar >= 1) {
+                row.eachCell({ includeEmpty: true }, (cell) => {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFFF00' }
+                    };
+                });
+            }
 
             // Si es un video, colocar hipervínculo funcional
             if (item.mediaUrl && item.mediaType === 'video') {
