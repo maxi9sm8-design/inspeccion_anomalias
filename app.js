@@ -158,7 +158,6 @@ function inicializarFormulario() {
 }
 
 // Deja el FILTRO del historial mostrando SOLO el día de hoy por defecto.
-// Si el usuario quiere ver otro día, solo cambia esta fecha.
 function establecerFiltroHoyPorDefecto() {
     const hoyStr = new Date().toISOString().split('T')[0];
     filterFechaEspecifica.value = hoyStr;
@@ -197,12 +196,9 @@ function toggleSeleccionMaquina(maq, elemento) {
 }
 
 /* ==========================================================================
-   MÓDULO DE MOTIVOS / CATEGORÍAS (ahora dinámico, guardado en Firestore)
+   MÓDULO DE MOTIVOS / CATEGORÍAS
    ========================================================================== */
 
-// Escucha en tiempo real la colección "categorias". Si está vacía (primera
-// vez que se usa la app), la siembra con los 4 motivos originales para que
-// nunca falten opciones.
 function escucharCategorias() {
     onSnapshot(categoriasRef, (snapshot) => {
         if (snapshot.empty && !categoriasSembradas) {
@@ -232,8 +228,6 @@ async function sembrarCategoriasPorDefecto() {
     }
 }
 
-// Renderiza el <select> del formulario y el <select> del filtro,
-// tratando de mantener la selección actual si el motivo sigue existiendo.
 function renderizarCategorias() {
     const seleccionFiltroActual = filterCategoria.value;
     const seleccionFormularioActual = categoriaInput.value;
@@ -266,7 +260,6 @@ function renderizarCategorias() {
     }
 }
 
-// Devuelve el texto legible de una categoría a partir de su id guardado
 function obtenerLabelCategoria(valor) {
     const cat = categoriasDinamicas.find(c => c.id === valor);
     return cat ? cat.nombre : (valor || 'N/R');
@@ -337,15 +330,28 @@ function renderizarPanelMotivos() {
 }
 
 async function agregarMotivo() {
-    console.log("[DIAGNÓSTICO] Usuario actual:", auth.currentUser);
-    console.log("[DIAGNÓSTICO] UID:", auth.currentUser ? auth.currentUser.uid : "NO HAY SESIÓN ACTIVA");
+    const usuario = auth.currentUser;
+    if (!usuario) {
+        alert("Sesión no iniciada. Por favor vuelva a ingresar a la aplicación.");
+        return;
+    }
 
-    const nombre = nuevoMotivoInput.value.trim();
-    if (!nombre) return;
+    const nombre = (nuevoMotivoInput.value || '').trim();
+    if (!nombre) {
+        alert("Por favor ingrese un nombre para el nuevo motivo.");
+        return;
+    }
+
+    // Objeto sanitizado: garantiza que ningún campo contenga 'undefined'
+    const datosMotivo = {
+        nombre: nombre
+    };
+
+    console.log("[DIAGNÓSTICO] Guardando motivo con datos válidos:", datosMotivo, "Usuario:", usuario.uid);
 
     btnAgregarMotivo.disabled = true;
     try {
-        await addDoc(categoriasRef, { nombre });
+        await addDoc(categoriasRef, datosMotivo);
         nuevoMotivoInput.value = '';
     } catch (error) {
         console.error("Error al agregar motivo:", error.code, error.message);
@@ -356,6 +362,11 @@ async function agregarMotivo() {
 }
 
 async function editarMotivo(id, nuevoNombre) {
+    if (!auth.currentUser) {
+        alert("Sesión no iniciada. Vuelva a ingresar a la aplicación.");
+        return;
+    }
+
     const nombre = (nuevoNombre || '').trim();
     if (!nombre) {
         alert("El nombre del motivo no puede quedar vacío.");
@@ -363,7 +374,7 @@ async function editarMotivo(id, nuevoNombre) {
     }
 
     try {
-        await updateDoc(doc(db, "categorias", id), { nombre });
+        await updateDoc(doc(db, "categorias", id), { nombre: nombre });
     } catch (error) {
         console.error("Error al editar motivo:", error.code, error.message);
         alert("No se pudo editar el motivo. Código: " + error.code);
@@ -371,6 +382,11 @@ async function editarMotivo(id, nuevoNombre) {
 }
 
 async function eliminarMotivo(id, nombre) {
+    if (!auth.currentUser) {
+        alert("Sesión no iniciada. Vuelva a ingresar a la aplicación.");
+        return;
+    }
+
     if (!confirm(`¿Eliminar el motivo "${nombre}"? Los registros ya guardados con este motivo no se borrarán, pero mostrarán el motivo como no disponible.`)) return;
 
     try {
@@ -387,6 +403,11 @@ async function eliminarMotivo(id, nombre) {
 
 anomaliaForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+
+    if (!auth.currentUser) {
+        alert("Sesión no iniciada. Por favor reingrese a la app.");
+        return;
+    }
 
     if (maquinasSeleccionadas.length === 0) {
         alert("Por favor, seleccione al menos una máquina.");
@@ -405,7 +426,7 @@ anomaliaForm.addEventListener('submit', async (e) => {
 
     try {
         // Subir archivo a Firebase Storage
-        const fileExt = mediaFile.name.split('.').pop();
+        const fileExt = mediaFile.name.split('.').pop() || 'file';
         const fileName = `evidencias/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const storageRef = ref(storage, fileName);
          
@@ -413,19 +434,19 @@ anomaliaForm.addEventListener('submit', async (e) => {
         const mediaUrl = await getDownloadURL(storageRef);
         const isVideo = mediaFile.type.startsWith('video');
 
-        // Guardar documento en Firestore
+        // Sanitización completa para prevenir valores 'undefined'
         const nuevoRegistro = {
             maquinas: [...maquinasSeleccionadas],
-            ruta: document.getElementById('rutaInput').value.trim(),
-            conductor: document.getElementById('conductorInput').value.trim() || 'N/R',
-            categoria: categoriaInput.value,
-            fecha: fechaInput.value,
-            hora: horaInput.value,
+            ruta: (document.getElementById('rutaInput').value || '').trim(),
+            conductor: (document.getElementById('conductorInput').value || '').trim() || 'N/R',
+            categoria: categoriaInput.value || '',
+            fecha: fechaInput.value || new Date().toISOString().split('T')[0],
+            hora: horaInput.value || new Date().toTimeString().slice(0, 5),
             pasajerosSinPagar: parseInt(document.getElementById('pasajerosInput').value) || 0,
-            lugar: document.getElementById('lugarInput').value.trim(),
-            descripcion: document.getElementById('descripcionInput').value.trim(),
-            mediaUrl: mediaUrl,
-            storagePath: fileName,
+            lugar: (document.getElementById('lugarInput').value || '').trim(),
+            descripcion: (document.getElementById('descripcionInput').value || '').trim(),
+            mediaUrl: mediaUrl || '',
+            storagePath: fileName || '',
             mediaType: isVideo ? 'video' : 'image',
             creadoEl: new Date().toISOString()
         };
@@ -453,7 +474,6 @@ anomaliaForm.addEventListener('submit', async (e) => {
    HISTORIAL EN TIEMPO REAL
    ========================================================================== */
 
-// Escuchar cambios en tiempo real desde Firestore
 function escucharFirestore() {
     const q = query(collection(db, "anomalias"), orderBy("creadoEl", "desc"));
      
@@ -472,7 +492,6 @@ function escucharFirestore() {
     });
 }
 
-// Configuración de Filtros
 function configurarFiltros() {
     filterRango.addEventListener('change', () => {
         if (filterRango.value !== 'todos') filterFechaEspecifica.value = '';
@@ -489,15 +508,13 @@ function configurarFiltros() {
 
     btnLimpiar.addEventListener('click', () => {
         filterRango.value = 'todos';
-        establecerFiltroHoyPorDefecto(); // "Limpiar" vuelve a mostrar solo el día de hoy
+        establecerFiltroHoyPorDefecto();
         filterBus.value = 'todos';
         filterCategoria.value = 'todos';
         aplicarFiltros();
     });
 }
 
-// Aplicar filtros (fecha, máquina y motivo). Esto alimenta tanto la tabla
-// visible como el Excel exportado, ya que ambos usan window.registrosFiltrados.
 function aplicarFiltros() {
     let resultados = [...todosLosRegistros];
 
@@ -544,7 +561,6 @@ function aplicarFiltros() {
     renderizarTabla(resultados);
 }
 
-// Renderizar Tabla HTML
 function renderizarTabla(registros) {
     cuerpoTabla.innerHTML = '';
 
@@ -594,7 +610,6 @@ function renderizarTabla(registros) {
     });
 }
 
-// Eliminar Registro
 async function eliminarRegistro(item) {
     if (!confirm("¿Está seguro de que desea eliminar este registro y su archivo de evidencia?")) return;
 
@@ -611,10 +626,9 @@ async function eliminarRegistro(item) {
 }
 
 /* ==========================================================================
-   MÓDULO DE EXPORTACIÓN A EXCEL (COMPATIBLE CON PC, iOS, ANDROID Y OFFICE 365)
+   MÓDULO DE EXPORTACIÓN A EXCEL
    ========================================================================== */
 
-// Función universal para procesar imágenes como PNG estándar
 async function descargarEIncrustarImagen(url) {
     return new Promise((resolve) => {
         const img = new Image();
@@ -625,7 +639,6 @@ async function descargarEIncrustarImagen(url) {
             try {
                 const canvas = document.createElement("canvas");
                  
-                // Limitar tamaño máximo a 600px para que abra rápido en celulares y no consuma RAM excesiva
                 const MAX_WIDTH = 600;
                 let width = img.naturalWidth || img.width;
                 let height = img.naturalHeight || img.height;
@@ -641,7 +654,6 @@ async function descargarEIncrustarImagen(url) {
                 const ctx = canvas.getContext("2d");
                 ctx.drawImage(img, 0, 0, width, height);
 
-                // Exportar como PNG estándar
                 const dataURL = canvas.toDataURL("image/png");
 
                 const base64Data = dataURL.split(',')[1];
@@ -665,7 +677,6 @@ async function descargarEIncrustarImagen(url) {
     });
 }
 
-// Generador de Excel con ExcelJS
 btnExportar.addEventListener('click', async () => {
     const textoOriginal = btnExportar.innerText;
 
@@ -683,7 +694,6 @@ btnExportar.addEventListener('click', async () => {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Reporte Anomalías');
 
-        // Columnas
         worksheet.columns = [
             { header: 'Fecha', key: 'fecha', width: 14 },
             { header: 'Hora', key: 'hora', width: 10 },
@@ -697,7 +707,6 @@ btnExportar.addEventListener('click', async () => {
             { header: 'Evidencia', key: 'evidencia', width: 24 }
         ];
 
-        // Encabezado
         const headerRow = worksheet.getRow(1);
         headerRow.font = { bold: true, color: { argb: 'FFFFFF' }, size: 11 };
         headerRow.fill = {
@@ -708,7 +717,6 @@ btnExportar.addEventListener('click', async () => {
         headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
         headerRow.height = 25;
 
-        // Agregar filas e incrustar imágenes/videos
         for (let i = 0; i < registrosAExportar.length; i++) {
             const item = registrosAExportar[i];
             const rowIndex = i + 2;
@@ -737,10 +745,8 @@ btnExportar.addEventListener('click', async () => {
 
             const row = worksheet.getRow(rowIndex);
             row.height = 80;
-            // Alineación centrada para todas las celdas de las filas de datos
             row.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
 
-            // Si hay 1 o más pasajeros sin pagar, pintar toda la fila de amarillo
             const pasajerosSinPagar = item.pasajerosSinPagar || 0;
             if (pasajerosSinPagar >= 1) {
                 row.eachCell({ includeEmpty: true }, (cell) => {
@@ -752,7 +758,6 @@ btnExportar.addEventListener('click', async () => {
                 });
             }
 
-            // Si es un video, colocar hipervínculo funcional
             if (item.mediaUrl && item.mediaType === 'video') {
                 const cell = row.getCell('evidencia');
                 cell.value = {
@@ -762,7 +767,6 @@ btnExportar.addEventListener('click', async () => {
                 };
                 cell.font = { color: { argb: '0000FF' }, underline: true };
             } 
-            // Si es imagen, se incrusta visualmente
             else if (item.mediaUrl && item.mediaType !== 'video') {
                 try {
                     const imageBuffer = await descargarEIncrustarImagen(item.mediaUrl);
@@ -785,7 +789,6 @@ btnExportar.addEventListener('click', async () => {
             }
         }
 
-        // Descargar archivo Excel
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const link = document.createElement('a');
