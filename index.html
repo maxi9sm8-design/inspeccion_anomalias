@@ -170,6 +170,17 @@
             cursor: pointer;
         }
 
+        .badge-categoria {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            background-color: #e9ecef;
+            color: var(--dark);
+            white-space: nowrap;
+        }
+
         .history-section {
             margin-top: 40px;
             padding-top: 20px;
@@ -326,6 +337,12 @@
                 <label for="conductorInput">Nombre Conductor:</label>
                 <input type="text" id="conductorInput" placeholder="Ej: Juan Pérez (Opcional)">
             </div>
+            <div class="form-group">
+                <label for="categoriaInput">Motivo / Categoría:</label>
+                <select id="categoriaInput" required>
+                    <option value="" disabled selected>Seleccione un motivo</option>
+                </select>
+            </div>
         </div>
 
         <div class="form-row">
@@ -391,6 +408,13 @@
                 </div>
 
                 <div>
+                    <label for="filterCategoria">Filtrar por Motivo:</label>
+                    <select id="filterCategoria">
+                        <option value="todos">Todos los motivos</option>
+                    </select>
+                </div>
+
+                <div>
                     <button id="btnLimpiar" class="btn" style="background-color: #6c757d;">Limpiar Filtros</button>
                 </div>
             </div>
@@ -410,6 +434,7 @@
                         <th>Máquina(s)</th>
                         <th>Ruta Principal</th>
                         <th>Conductor</th>
+                        <th>Motivo</th>
                         <th>Pasajeros Sin Pagar</th>
                         <th>Lugar / Parada</th>
                         <th>Descripción</th>
@@ -418,7 +443,7 @@
                     </tr>
                 </thead>
                 <tbody id="cuerpoTabla">
-                    <tr><td colspan="10" style="text-align:center;">Cargando historial desde la nube...</td></tr>
+                    <tr><td colspan="11" style="text-align:center;">Cargando historial desde la nube...</td></tr>
                 </tbody>
             </table>
         </div>
