@@ -337,6 +337,9 @@ function renderizarPanelMotivos() {
 }
 
 async function agregarMotivo() {
+    console.log("[DIAGNÓSTICO] Usuario actual:", auth.currentUser);
+    console.log("[DIAGNÓSTICO] UID:", auth.currentUser ? auth.currentUser.uid : "NO HAY SESIÓN ACTIVA");
+
     const nombre = nuevoMotivoInput.value.trim();
     if (!nombre) return;
 
@@ -345,8 +348,8 @@ async function agregarMotivo() {
         await addDoc(categoriasRef, { nombre });
         nuevoMotivoInput.value = '';
     } catch (error) {
-        console.error("Error al agregar motivo:", error);
-        alert("No se pudo agregar el motivo.");
+        console.error("Error al agregar motivo:", error.code, error.message);
+        alert("No se pudo agregar el motivo. Código: " + error.code);
     } finally {
         btnAgregarMotivo.disabled = false;
     }
@@ -362,8 +365,8 @@ async function editarMotivo(id, nuevoNombre) {
     try {
         await updateDoc(doc(db, "categorias", id), { nombre });
     } catch (error) {
-        console.error("Error al editar motivo:", error);
-        alert("No se pudo editar el motivo.");
+        console.error("Error al editar motivo:", error.code, error.message);
+        alert("No se pudo editar el motivo. Código: " + error.code);
     }
 }
 
@@ -373,8 +376,8 @@ async function eliminarMotivo(id, nombre) {
     try {
         await deleteDoc(doc(db, "categorias", id));
     } catch (error) {
-        console.error("Error al eliminar motivo:", error);
-        alert("No se pudo eliminar el motivo.");
+        console.error("Error al eliminar motivo:", error.code, error.message);
+        alert("No se pudo eliminar el motivo. Código: " + error.code);
     }
 }
 
