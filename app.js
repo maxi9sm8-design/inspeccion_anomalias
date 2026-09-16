@@ -33,6 +33,14 @@ const LISTA_MAQUINAS = [
     "113", "115", "203", "114", "128", "117", "126"
 ];
 
+// Lista de Categorías / Motivos de la anomalía
+const LISTA_CATEGORIAS = [
+    { value: "conejos", label: "Conejos (pasajero fuera de ruta)" },
+    { value: "conductor", label: "Conductor" },
+    { value: "camaras", label: "Cámaras" },
+    { value: "otro", label: "Otro" }
+];
+
 // Variables globales de estado
 let maquinasSeleccionadas = [];
 let todosLosRegistros = [];
@@ -44,6 +52,7 @@ const maquinasContainer = document.getElementById('maquinasContainer');
 const anomaliaForm = document.getElementById('anomaliaForm');
 const fechaInput = document.getElementById('fechaInput');
 const horaInput = document.getElementById('horaInput');
+const categoriaInput = document.getElementById('categoriaInput');
 const cuerpoTabla = document.getElementById('cuerpoTabla');
 const statusMsg = document.getElementById('statusMsg');
 const totalResultados = document.getElementById('totalResultados');
@@ -51,6 +60,7 @@ const totalResultados = document.getElementById('totalResultados');
 const filterRango = document.getElementById('filterRango');
 const filterFechaEspecifica = document.getElementById('filterFechaEspecifica');
 const filterBus = document.getElementById('filterBus');
+const filterCategoria = document.getElementById('filterCategoria');
 const btnLimpiar = document.getElementById('btnLimpiar');
 const btnExportar = document.getElementById('btnExportar');
 
@@ -79,6 +89,7 @@ onAuthStateChanged(auth, (user) => {
             appIniciada = true;
             inicializarFormulario();
             renderizarChipsMaquinas();
+            renderizarCategorias();
             escucharFirestore();
             configurarFiltros();
         }
@@ -161,6 +172,31 @@ function toggleSeleccionMaquina(maq, elemento) {
     }
 }
 
+// Renderizar selector de Categorías/Motivos (formulario + filtro)
+function renderizarCategorias() {
+    // Deja la opción "Seleccione un motivo" y agrega el resto
+    categoriaInput.innerHTML = '<option value="" disabled selected>Seleccione un motivo</option>';
+    filterCategoria.innerHTML = '<option value="todos">Todos los motivos</option>';
+
+    LISTA_CATEGORIAS.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat.value;
+        opt.innerText = cat.label;
+        categoriaInput.appendChild(opt);
+
+        const optFiltro = document.createElement('option');
+        optFiltro.value = cat.value;
+        optFiltro.innerText = cat.label;
+        filterCategoria.appendChild(optFiltro);
+    });
+}
+
+// Devuelve el texto legible de una categoría a partir de su valor guardado
+function obtenerLabelCategoria(valor) {
+    const cat = LISTA_CATEGORIAS.find(c => c.value === valor);
+    return cat ? cat.label : (valor || 'N/R');
+}
+
 // Guardar Registro en Firebase Firestore y Storage
 anomaliaForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -195,6 +231,7 @@ anomaliaForm.addEventListener('submit', async (e) => {
             maquinas: [...maquinasSeleccionadas],
             ruta: document.getElementById('rutaInput').value.trim(),
             conductor: document.getElementById('conductorInput').value.trim() || 'N/R',
+            categoria: categoriaInput.value,
             fecha: fechaInput.value,
             hora: horaInput.value,
             pasajerosSinPagar: parseInt(document.getElementById('pasajerosInput').value) || 0,
@@ -240,7 +277,7 @@ function escucharFirestore() {
         aplicarFiltros();
     }, (error) => {
         console.error("Error leyendo datos de Firestore:", error);
-        cuerpoTabla.innerHTML = `<tr><td colspan="10" style="text-align:center; color:red;">Error al cargar datos desde la nube.</td></tr>`;
+        cuerpoTabla.innerHTML = `<tr><td colspan="11" style="text-align:center; color:red;">Error al cargar datos desde la nube.</td></tr>`;
     });
 }
 
@@ -257,11 +294,13 @@ function configurarFiltros() {
     });
 
     filterBus.addEventListener('change', aplicarFiltros);
+    filterCategoria.addEventListener('change', aplicarFiltros);
 
     btnLimpiar.addEventListener('click', () => {
         filterRango.value = 'todos';
         filterFechaEspecifica.value = '';
         filterBus.value = 'todos';
+        filterCategoria.value = 'todos';
         aplicarFiltros();
     });
 }
@@ -303,6 +342,11 @@ function aplicarFiltros() {
         });
     }
 
+    const categoriaFiltro = filterCategoria.value;
+    if (categoriaFiltro !== 'todos') {
+        resultados = resultados.filter(r => r.categoria === categoriaFiltro);
+    }
+
     window.registrosFiltrados = resultados;
     totalResultados.innerText = `Registros encontrados: ${resultados.length}`;
     renderizarTabla(resultados);
@@ -313,7 +357,7 @@ function renderizarTabla(registros) {
     cuerpoTabla.innerHTML = '';
 
     if (registros.length === 0) {
-        cuerpoTabla.innerHTML = `<tr><td colspan="10" style="text-align:center;">No se encontraron registros.</td></tr>`;
+        cuerpoTabla.innerHTML = `<tr><td colspan="11" style="text-align:center;">No se encontraron registros.</td></tr>`;
         return;
     }
 
@@ -341,6 +385,7 @@ function renderizarTabla(registros) {
             <td><strong>${maquinasTexto}</strong></td>
             <td>${item.ruta || ''}</td>
             <td>${item.conductor || 'N/R'}</td>
+            <td><span class="badge-categoria">${obtenerLabelCategoria(item.categoria)}</span></td>
             <td style="text-align:center;"><strong>${item.pasajerosSinPagar || 0}</strong></td>
             <td>${item.lugar || ''}</td>
             <td>${item.descripcion || ''}</td>
@@ -453,6 +498,7 @@ btnExportar.addEventListener('click', async () => {
             { header: 'Máquina(s)', key: 'maquinas', width: 22 },
             { header: 'Ruta Principal', key: 'ruta', width: 25 },
             { header: 'Conductor', key: 'conductor', width: 22 },
+            { header: 'Motivo', key: 'categoria', width: 20 },
             { header: 'Pasajeros Sin Pagar', key: 'pasajeros', width: 20 },
             { header: 'Lugar / Parada', key: 'lugar', width: 25 },
             { header: 'Descripción', key: 'descripcion', width: 38 },
@@ -490,6 +536,7 @@ btnExportar.addEventListener('click', async () => {
                 maquinas: maquinasTexto,
                 ruta: item.ruta || '',
                 conductor: item.conductor || 'N/R',
+                categoria: obtenerLabelCategoria(item.categoria),
                 pasajeros: item.pasajerosSinPagar || 0,
                 lugar: item.lugar || '',
                 descripcion: item.descripcion || '',
@@ -535,7 +582,7 @@ btnExportar.addEventListener('click', async () => {
                         });
 
                         worksheet.addImage(imageId, {
-                            tl: { col: 8, row: rowIndex - 1 },
+                            tl: { col: 9, row: rowIndex - 1 },
                             ext: { width: 130, height: 95 },
                             editAs: 'oneCell'
                         });
