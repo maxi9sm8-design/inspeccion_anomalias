@@ -1,7 +1,8 @@
 // app.js - Control de Anomalías Buses Tarapacá
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { 
-    getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc 
+    getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc,
+    setDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { 
     getStorage, ref, uploadBytes, getDownloadURL, deleteObject 
@@ -33,17 +34,23 @@ const LISTA_MAQUINAS = [
     "113", "115", "203", "114", "128", "117", "126"
 ];
 
-// Lista de Categorías / Motivos de la anomalía
-const LISTA_CATEGORIAS = [
-    { value: "conejos", label: "Conejos (pasajero fuera de ruta)" },
-    { value: "conductor", label: "Conductor" },
-    { value: "camaras", label: "Cámaras" },
-    { value: "otro", label: "Otro" }
+// Motivos por defecto: se usan SOLO la primera vez, para "sembrar"
+// la colección "categorias" en Firestore si está vacía.
+const CATEGORIAS_POR_DEFECTO = [
+    { id: "conejos", nombre: "Conejos (pasajero fuera de ruta)" },
+    { id: "conductor", nombre: "Conductor" },
+    { id: "camaras", nombre: "Cámaras" },
+    { id: "otro", nombre: "Otro" }
 ];
+
+// Referencia a la colección de motivos en Firestore
+const categoriasRef = collection(db, "categorias");
+let categoriasSembradas = false;
 
 // Variables globales de estado
 let maquinasSeleccionadas = [];
 let todosLosRegistros = [];
+let categoriasDinamicas = []; // [{id, nombre}]
 let appIniciada = false;
 window.registrosFiltrados = [];
 
@@ -74,6 +81,14 @@ const loginError = document.getElementById('loginError');
 const btnLoginSubmit = document.getElementById('btnLoginSubmit');
 const btnLogout = document.getElementById('btnLogout');
 
+// Elementos del DOM - Gestión de Motivos
+const btnGestionarMotivos = document.getElementById('btnGestionarMotivos');
+const motivosOverlay = document.getElementById('motivosOverlay');
+const btnCerrarMotivos = document.getElementById('btnCerrarMotivos');
+const listaMotivosContainer = document.getElementById('listaMotivosContainer');
+const nuevoMotivoInput = document.getElementById('nuevoMotivoInput');
+const btnAgregarMotivo = document.getElementById('btnAgregarMotivo');
+
 /* ==========================================================================
    MÓDULO DE AUTENTICACIÓN
    ========================================================================== */
@@ -88,10 +103,12 @@ onAuthStateChanged(auth, (user) => {
         if (!appIniciada) {
             appIniciada = true;
             inicializarFormulario();
+            establecerFiltroHoyPorDefecto();
             renderizarChipsMaquinas();
-            renderizarCategorias();
+            escucharCategorias();
             escucharFirestore();
             configurarFiltros();
+            configurarGestionMotivos();
         }
     } else {
         appContainer.style.display = 'none';
@@ -133,11 +150,18 @@ if (btnLogout) {
     });
 }
 
-// Ajustar fecha y hora actual por defecto
+// Ajustar fecha y hora actual por defecto (para el FORMULARIO de nuevo registro)
 function inicializarFormulario() {
     const hoy = new Date();
     fechaInput.value = hoy.toISOString().split('T')[0];
     horaInput.value = hoy.toTimeString().slice(0, 5);
+}
+
+// Deja el FILTRO del historial mostrando SOLO el día de hoy por defecto.
+// Si el usuario quiere ver otro día, solo cambia esta fecha.
+function establecerFiltroHoyPorDefecto() {
+    const hoyStr = new Date().toISOString().split('T')[0];
+    filterFechaEspecifica.value = hoyStr;
 }
 
 // Renderizar selector dinámico de máquinas (Chips)
@@ -172,32 +196,192 @@ function toggleSeleccionMaquina(maq, elemento) {
     }
 }
 
-// Renderizar selector de Categorías/Motivos (formulario + filtro)
-function renderizarCategorias() {
-    // Deja la opción "Seleccione un motivo" y agrega el resto
-    categoriaInput.innerHTML = '<option value="" disabled selected>Seleccione un motivo</option>';
-    filterCategoria.innerHTML = '<option value="todos">Todos los motivos</option>';
+/* ==========================================================================
+   MÓDULO DE MOTIVOS / CATEGORÍAS (ahora dinámico, guardado en Firestore)
+   ========================================================================== */
 
-    LISTA_CATEGORIAS.forEach(cat => {
-        const opt = document.createElement('option');
-        opt.value = cat.value;
-        opt.innerText = cat.label;
-        categoriaInput.appendChild(opt);
+// Escucha en tiempo real la colección "categorias". Si está vacía (primera
+// vez que se usa la app), la siembra con los 4 motivos originales para que
+// nunca falten opciones.
+function escucharCategorias() {
+    onSnapshot(categoriasRef, (snapshot) => {
+        if (snapshot.empty && !categoriasSembradas) {
+            categoriasSembradas = true;
+            sembrarCategoriasPorDefecto();
+            return;
+        }
 
-        const optFiltro = document.createElement('option');
-        optFiltro.value = cat.value;
-        optFiltro.innerText = cat.label;
-        filterCategoria.appendChild(optFiltro);
+        categoriasDinamicas = snapshot.docs
+            .map(d => ({ id: d.id, nombre: d.data().nombre || '' }))
+            .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+        renderizarCategorias();
+        renderizarPanelMotivos();
+    }, (error) => {
+        console.error("Error leyendo motivos desde Firestore:", error);
     });
 }
 
-// Devuelve el texto legible de una categoría a partir de su valor guardado
-function obtenerLabelCategoria(valor) {
-    const cat = LISTA_CATEGORIAS.find(c => c.value === valor);
-    return cat ? cat.label : (valor || 'N/R');
+async function sembrarCategoriasPorDefecto() {
+    try {
+        for (const cat of CATEGORIAS_POR_DEFECTO) {
+            await setDoc(doc(db, "categorias", cat.id), { nombre: cat.nombre });
+        }
+    } catch (error) {
+        console.error("Error al crear los motivos por defecto:", error);
+    }
 }
 
-// Guardar Registro en Firebase Firestore y Storage
+// Renderiza el <select> del formulario y el <select> del filtro,
+// tratando de mantener la selección actual si el motivo sigue existiendo.
+function renderizarCategorias() {
+    const seleccionFiltroActual = filterCategoria.value;
+    const seleccionFormularioActual = categoriaInput.value;
+
+    categoriaInput.innerHTML = '<option value="" disabled>Seleccione un motivo</option>';
+    filterCategoria.innerHTML = '<option value="todos">Todos los motivos</option>';
+
+    categoriasDinamicas.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat.id;
+        opt.innerText = cat.nombre;
+        categoriaInput.appendChild(opt);
+
+        const optFiltro = document.createElement('option');
+        optFiltro.value = cat.id;
+        optFiltro.innerText = cat.nombre;
+        filterCategoria.appendChild(optFiltro);
+    });
+
+    if (categoriasDinamicas.some(c => c.id === seleccionFormularioActual)) {
+        categoriaInput.value = seleccionFormularioActual;
+    } else {
+        categoriaInput.value = "";
+    }
+
+    if (seleccionFiltroActual === 'todos' || categoriasDinamicas.some(c => c.id === seleccionFiltroActual)) {
+        filterCategoria.value = seleccionFiltroActual;
+    } else {
+        filterCategoria.value = 'todos';
+    }
+}
+
+// Devuelve el texto legible de una categoría a partir de su id guardado
+function obtenerLabelCategoria(valor) {
+    const cat = categoriasDinamicas.find(c => c.id === valor);
+    return cat ? cat.nombre : (valor || 'N/R');
+}
+
+// --- Panel de gestión: agregar / editar / eliminar motivos ---
+
+function configurarGestionMotivos() {
+    btnGestionarMotivos.addEventListener('click', () => {
+        renderizarPanelMotivos();
+        motivosOverlay.style.display = 'flex';
+    });
+
+    btnCerrarMotivos.addEventListener('click', () => {
+        motivosOverlay.style.display = 'none';
+    });
+
+    motivosOverlay.addEventListener('click', (e) => {
+        if (e.target === motivosOverlay) motivosOverlay.style.display = 'none';
+    });
+
+    btnAgregarMotivo.addEventListener('click', agregarMotivo);
+    nuevoMotivoInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            agregarMotivo();
+        }
+    });
+}
+
+function renderizarPanelMotivos() {
+    if (!listaMotivosContainer) return;
+    listaMotivosContainer.innerHTML = '';
+
+    if (categoriasDinamicas.length === 0) {
+        listaMotivosContainer.innerHTML = '<p style="text-align:center; color:#666;">Aún no hay motivos creados.</p>';
+        return;
+    }
+
+    categoriasDinamicas.forEach(cat => {
+        const fila = document.createElement('div');
+        fila.className = 'motivo-fila';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = cat.nombre;
+        input.className = 'motivo-input';
+
+        const btnGuardar = document.createElement('button');
+        btnGuardar.type = 'button';
+        btnGuardar.className = 'btn-guardar-motivo';
+        btnGuardar.innerText = '💾';
+        btnGuardar.title = 'Guardar cambios';
+        btnGuardar.addEventListener('click', () => editarMotivo(cat.id, input.value));
+
+        const btnEliminar = document.createElement('button');
+        btnEliminar.type = 'button';
+        btnEliminar.className = 'btn-eliminar-motivo';
+        btnEliminar.innerText = '🗑️';
+        btnEliminar.title = 'Eliminar motivo';
+        btnEliminar.addEventListener('click', () => eliminarMotivo(cat.id, cat.nombre));
+
+        fila.appendChild(input);
+        fila.appendChild(btnGuardar);
+        fila.appendChild(btnEliminar);
+        listaMotivosContainer.appendChild(fila);
+    });
+}
+
+async function agregarMotivo() {
+    const nombre = nuevoMotivoInput.value.trim();
+    if (!nombre) return;
+
+    btnAgregarMotivo.disabled = true;
+    try {
+        await addDoc(categoriasRef, { nombre });
+        nuevoMotivoInput.value = '';
+    } catch (error) {
+        console.error("Error al agregar motivo:", error);
+        alert("No se pudo agregar el motivo.");
+    } finally {
+        btnAgregarMotivo.disabled = false;
+    }
+}
+
+async function editarMotivo(id, nuevoNombre) {
+    const nombre = (nuevoNombre || '').trim();
+    if (!nombre) {
+        alert("El nombre del motivo no puede quedar vacío.");
+        return;
+    }
+
+    try {
+        await updateDoc(doc(db, "categorias", id), { nombre });
+    } catch (error) {
+        console.error("Error al editar motivo:", error);
+        alert("No se pudo editar el motivo.");
+    }
+}
+
+async function eliminarMotivo(id, nombre) {
+    if (!confirm(`¿Eliminar el motivo "${nombre}"? Los registros ya guardados con este motivo no se borrarán, pero mostrarán el motivo como no disponible.`)) return;
+
+    try {
+        await deleteDoc(doc(db, "categorias", id));
+    } catch (error) {
+        console.error("Error al eliminar motivo:", error);
+        alert("No se pudo eliminar el motivo.");
+    }
+}
+
+/* ==========================================================================
+   GUARDAR REGISTRO en Firebase Firestore y Storage
+   ========================================================================== */
+
 anomaliaForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
@@ -262,6 +446,10 @@ anomaliaForm.addEventListener('submit', async (e) => {
     }
 });
 
+/* ==========================================================================
+   HISTORIAL EN TIEMPO REAL
+   ========================================================================== */
+
 // Escuchar cambios en tiempo real desde Firestore
 function escucharFirestore() {
     const q = query(collection(db, "anomalias"), orderBy("creadoEl", "desc"));
@@ -298,14 +486,15 @@ function configurarFiltros() {
 
     btnLimpiar.addEventListener('click', () => {
         filterRango.value = 'todos';
-        filterFechaEspecifica.value = '';
+        establecerFiltroHoyPorDefecto(); // "Limpiar" vuelve a mostrar solo el día de hoy
         filterBus.value = 'todos';
         filterCategoria.value = 'todos';
         aplicarFiltros();
     });
 }
 
-// Aplicar filtros
+// Aplicar filtros (fecha, máquina y motivo). Esto alimenta tanto la tabla
+// visible como el Excel exportado, ya que ambos usan window.registrosFiltrados.
 function aplicarFiltros() {
     let resultados = [...todosLosRegistros];
 
