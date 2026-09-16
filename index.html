@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Control de Anomalías - Buses Tarapacá</title>
 
-    <link rel="manifest" href="/manifest.json">
+    <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#003366">
 
     <style>
@@ -283,6 +283,149 @@
             margin-top: 0;
         }
 
+        /* Selector de Motivo + botón de gestión, en la misma fila */
+        .categoria-field {
+            display: flex;
+            gap: 8px;
+            align-items: stretch;
+        }
+
+        .categoria-field select {
+            flex: 1;
+        }
+
+        .btn-gestionar {
+            flex-shrink: 0;
+            width: auto;
+            background-color: #495057;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 0 14px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+
+        .btn-gestionar:hover {
+            background-color: #343a40;
+        }
+
+        /* Overlay / Modal de gestión de motivos */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .modal-box {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            width: 100%;
+            max-width: 480px;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            text-align: left;
+        }
+
+        .btn-cerrar-modal {
+            background: none;
+            border: none;
+            font-size: 22px;
+            line-height: 1;
+            cursor: pointer;
+            color: #666;
+            padding: 4px 8px;
+        }
+
+        .btn-cerrar-modal:hover {
+            color: var(--dark);
+        }
+
+        #listaMotivosContainer {
+            overflow-y: auto;
+            margin-bottom: 15px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px;
+            background: #f8f9fa;
+            min-height: 60px;
+        }
+
+        .motivo-fila {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .motivo-fila:last-child {
+            margin-bottom: 0;
+        }
+
+        .motivo-input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .btn-guardar-motivo,
+        .btn-eliminar-motivo {
+            flex-shrink: 0;
+            border: none;
+            border-radius: 5px;
+            padding: 8px 10px;
+            font-size: 15px;
+            cursor: pointer;
+            background-color: #e9ecef;
+        }
+
+        .btn-guardar-motivo:hover {
+            background-color: #d4edda;
+        }
+
+        .btn-eliminar-motivo:hover {
+            background-color: #f8d7da;
+        }
+
+        .agregar-motivo-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .agregar-motivo-row input {
+            flex: 1;
+        }
+
+        .agregar-motivo-row button {
+            flex-shrink: 0;
+            width: auto;
+            padding: 10px 16px;
+        }
+
         @media (max-width: 768px) {
             .filter-grid {
                 grid-template-columns: 1fr;
@@ -339,9 +482,12 @@
             </div>
             <div class="form-group">
                 <label for="categoriaInput">Motivo / Categoría:</label>
-                <select id="categoriaInput" required>
-                    <option value="" disabled selected>Seleccione un motivo</option>
-                </select>
+                <div class="categoria-field">
+                    <select id="categoriaInput" required>
+                        <option value="" disabled selected>Seleccione un motivo</option>
+                    </select>
+                    <button type="button" id="btnGestionarMotivos" class="btn-gestionar" title="Agregar, editar o eliminar motivos">⚙️</button>
+                </div>
             </div>
         </div>
 
@@ -446,6 +592,25 @@
                     <tr><td colspan="11" style="text-align:center;">Cargando historial desde la nube...</td></tr>
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Gestión de Motivos / Categorías -->
+<div id="motivosOverlay" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h2>⚙️ Gestionar Motivos</h2>
+            <button type="button" id="btnCerrarMotivos" class="btn-cerrar-modal" title="Cerrar">✕</button>
+        </div>
+
+        <div id="listaMotivosContainer">
+            <!-- Se llena dinámicamente desde app.js -->
+        </div>
+
+        <div class="agregar-motivo-row">
+            <input type="text" id="nuevoMotivoInput" placeholder="Nuevo motivo...">
+            <button type="button" id="btnAgregarMotivo" class="btn">Agregar</button>
         </div>
     </div>
 </div>
