@@ -11,7 +11,7 @@ import {
     getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// 1. Configuración de Firebase con tu API Key real
+// 1. Configuración de Firebase
 const firebaseConfig = {
     apiKey: "AIzaSyCfhwfmzg6YJ1BRyCrDgksQQ3C5uGuhHhs",
     authDomain: "registro-6bd00.firebaseapp.com",
@@ -34,8 +34,7 @@ const LISTA_MAQUINAS = [
     "113", "115", "203", "114", "128", "117", "126"
 ];
 
-// Motivos por defecto: se usan SOLO la primera vez, para "sembrar"
-// la colección "categorias" en Firestore si está vacía.
+// Motivos por defecto: se usan SOLO la primera vez para "sembrar" Firestore
 const CATEGORIAS_POR_DEFECTO = [
     { id: "conejos", nombre: "Conejos (pasajero fuera de ruta)" },
     { id: "conductor", nombre: "Conductor" },
@@ -93,13 +92,12 @@ const btnAgregarMotivo = document.getElementById('btnAgregarMotivo');
    MÓDULO DE AUTENTICACIÓN
    ========================================================================== */
 
-// Escuchar cambios de sesión: controla qué se muestra (login o app)
+// Escuchar cambios de sesión
 onAuthStateChanged(auth, (user) => {
     if (user) {
         loginOverlay.style.display = 'none';
         appContainer.style.display = 'block';
 
-        // Inicializar la app solo la primera vez que hay sesión activa
         if (!appIniciada) {
             appIniciada = true;
             inicializarFormulario();
@@ -150,7 +148,7 @@ if (btnLogout) {
     });
 }
 
-// Ajustar fecha y hora actual por defecto (para el FORMULARIO de nuevo registro)
+// Ajustar fecha y hora actual por defecto
 function inicializarFormulario() {
     const hoy = new Date();
     fechaInput.value = hoy.toISOString().split('T')[0];
@@ -169,7 +167,6 @@ function renderizarChipsMaquinas() {
     filterBus.innerHTML = '<option value="todos">Todas las máquinas</option>';
 
     LISTA_MAQUINAS.forEach(maq => {
-        // Botón para formulario
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'chip-btn';
@@ -177,7 +174,6 @@ function renderizarChipsMaquinas() {
         btn.addEventListener('click', () => toggleSeleccionMaquina(maq, btn));
         maquinasContainer.appendChild(btn);
 
-        // Opción para filtro
         const opt = document.createElement('option');
         opt.value = maq;
         opt.innerText = `Máquina ${maq}`;
@@ -265,8 +261,7 @@ function obtenerLabelCategoria(valor) {
     return cat ? cat.nombre : (valor || 'N/R');
 }
 
-// --- Panel de gestión: agregar / editar / eliminar motivos ---
-
+// Panel de gestión: agregar / editar / eliminar motivos
 function configurarGestionMotivos() {
     btnGestionarMotivos.addEventListener('click', () => {
         renderizarPanelMotivos();
@@ -342,12 +337,7 @@ async function agregarMotivo() {
         return;
     }
 
-    // Objeto sanitizado: garantiza que ningún campo contenga 'undefined'
-    const datosMotivo = {
-        nombre: nombre
-    };
-
-    console.log("[DIAGNÓSTICO] Guardando motivo con datos válidos:", datosMotivo, "Usuario:", usuario.uid);
+    const datosMotivo = { nombre: nombre };
 
     btnAgregarMotivo.disabled = true;
     try {
@@ -425,7 +415,6 @@ anomaliaForm.addEventListener('submit', async (e) => {
     statusMsg.innerText = "⏳ Subiendo evidencia a la nube...";
 
     try {
-        // Subir archivo a Firebase Storage
         const fileExt = mediaFile.name.split('.').pop() || 'file';
         const fileName = `evidencias/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const storageRef = ref(storage, fileName);
@@ -434,7 +423,6 @@ anomaliaForm.addEventListener('submit', async (e) => {
         const mediaUrl = await getDownloadURL(storageRef);
         const isVideo = mediaFile.type.startsWith('video');
 
-        // Sanitización completa para prevenir valores 'undefined'
         const nuevoRegistro = {
             maquinas: [...maquinasSeleccionadas],
             ruta: (document.getElementById('rutaInput').value || '').trim(),
