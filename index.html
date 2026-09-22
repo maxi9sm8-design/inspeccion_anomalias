@@ -458,13 +458,14 @@
     </div>
 </div>
 
-<!-- Aplicación Principal (oculta hasta iniciar sesión) -->
+<!-- Aplicación Principal -->
 <div class="container" id="appContainer">
     <div class="app-header">
         <h1>🚌 Control de Anomalías - Buses Tarapacá (Nube)</h1>
         <button id="btnLogout" class="btn btn-logout">Cerrar Sesión</button>
     </div>
 
+    <!-- Formulario de Registro -->
     <form id="anomaliaForm">
         <div class="form-group">
             <label>Seleccione Máquina(s): <small style="font-weight:normal; color:#666;">(Puede marcar varias a la vez)</small></label>
@@ -525,13 +526,14 @@
         <div id="statusMsg" class="status-msg"></div>
     </form>
 
+    <!-- Sección de Historial y Filtros -->
     <div class="history-section">
         <h2>🔍 Historial de Reportes en Tiempo Real</h2>
 
         <div class="filter-card">
             <div class="filter-grid">
                 <div>
-                    <label for="filterRango">Filtrar por Rango:</label>
+                    <label for="filterRango">Rango de Fecha:</label>
                     <select id="filterRango">
                         <option value="todos">Todos los registros</option>
                         <option value="dia">Hoy (Día)</option>
@@ -546,15 +548,26 @@
                     <input type="date" id="filterFechaEspecifica">
                 </div>
 
+                <!-- NUEVOS CAMPOS DE FILTRO POR HORA -->
                 <div>
-                    <label for="filterBus">Filtrar por Máquina:</label>
+                    <label for="filterHoraInicio">Desde Hora:</label>
+                    <input type="time" id="filterHoraInicio">
+                </div>
+
+                <div>
+                    <label for="filterHoraFin">Hasta Hora:</label>
+                    <input type="time" id="filterHoraFin">
+                </div>
+
+                <div>
+                    <label for="filterBus">Máquina:</label>
                     <select id="filterBus">
                         <option value="todos">Todas las máquinas</option>
                     </select>
                 </div>
 
                 <div>
-                    <label for="filterCategoria">Filtrar por Motivo:</label>
+                    <label for="filterCategoria">Motivo / Categoría:</label>
                     <select id="filterCategoria">
                         <option value="todos">Todos los motivos</option>
                     </select>
@@ -596,7 +609,7 @@
     </div>
 </div>
 
-<!-- Modal: Gestión de Motivos / Categorías -->
+<!-- Modal: Gestión de Motivos -->
 <div id="motivosOverlay" class="modal-overlay">
     <div class="modal-box">
         <div class="modal-header">
@@ -604,9 +617,7 @@
             <button type="button" id="btnCerrarMotivos" class="btn-cerrar-modal" title="Cerrar">✕</button>
         </div>
 
-        <div id="listaMotivosContainer">
-            <!-- Se llena dinámicamente desde app.js -->
-        </div>
+        <div id="listaMotivosContainer"></div>
 
         <div class="agregar-motivo-row">
             <input type="text" id="nuevoMotivoInput" placeholder="Nuevo motivo...">
@@ -615,10 +626,7 @@
     </div>
 </div>
 
-<!-- Librería ExcelJS para generación nativa de .xlsx con imágenes -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
-
-<!-- Script principal de la aplicación -->
 <script src="./app.js" type="module"></script>
 
 </body>
