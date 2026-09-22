@@ -64,7 +64,10 @@ const statusMsg = document.getElementById('statusMsg');
 const totalResultados = document.getElementById('totalResultados');
 
 const filterRango = document.getElementById('filterRango');
-const filterFechaEspecifica = document.getElementById('filterFechaEspecifica');
+const filterFechaInicio = document.getElementById('filterFechaInicio');
+const filterHoraInicio = document.getElementById('filterHoraInicio');
+const filterFechaFin = document.getElementById('filterFechaFin');
+const filterHoraFin = document.getElementById('filterHoraFin');
 const filterBus = document.getElementById('filterBus');
 const filterCategoria = document.getElementById('filterCategoria');
 const btnLimpiar = document.getElementById('btnLimpiar');
@@ -157,8 +160,11 @@ function inicializarFormulario() {
 
 // Deja el FILTRO del historial mostrando SOLO el día de hoy por defecto.
 function establecerFiltroHoyPorDefecto() {
-    const hoyStr = new Date().toISOString().split('T')[0];
-    filterFechaEspecifica.value = hoyStr;
+    filterRango.value = 'dia';
+    filterFechaInicio.value = '';
+    filterHoraInicio.value = '';
+    filterFechaFin.value = '';
+    filterHoraFin.value = '';
 }
 
 // Renderizar selector dinámico de máquinas (Chips)
@@ -481,21 +487,31 @@ function escucharFirestore() {
 }
 
 function configurarFiltros() {
+    // Filtro rápido (Todos / Hoy / Semana / Mes / Año)
     filterRango.addEventListener('change', () => {
-        if (filterRango.value !== 'todos') filterFechaEspecifica.value = '';
+        if (filterRango.value !== 'todos') {
+            // Si se usa el filtro rápido, se limpia el rango personalizado
+            filterFechaInicio.value = '';
+            filterHoraInicio.value = '';
+            filterFechaFin.value = '';
+            filterHoraFin.value = '';
+        }
         aplicarFiltros();
     });
 
-    filterFechaEspecifica.addEventListener('change', () => {
-        if (filterFechaEspecifica.value) filterRango.value = 'todos';
-        aplicarFiltros();
+    // Filtro personalizado por fecha y hora (Desde -> Hasta)
+    [filterFechaInicio, filterHoraInicio, filterFechaFin, filterHoraFin].forEach(campo => {
+        campo.addEventListener('change', () => {
+            // Si el usuario define un rango personalizado, el filtro rápido pasa a "todos"
+            filterRango.value = 'todos';
+            aplicarFiltros();
+        });
     });
 
     filterBus.addEventListener('change', aplicarFiltros);
     filterCategoria.addEventListener('change', aplicarFiltros);
 
     btnLimpiar.addEventListener('click', () => {
-        filterRango.value = 'todos';
         establecerFiltroHoyPorDefecto();
         filterBus.value = 'todos';
         filterCategoria.value = 'todos';
@@ -506,13 +522,36 @@ function configurarFiltros() {
 function aplicarFiltros() {
     let resultados = [...todosLosRegistros];
 
-    const fechaEsp = filterFechaEspecifica.value;
-    if (fechaEsp) {
-        resultados = resultados.filter(r => r.fecha === fechaEsp);
+    const fechaInicioVal = filterFechaInicio.value;
+    const horaInicioVal = filterHoraInicio.value;
+    const fechaFinVal = filterFechaFin.value;
+    const horaFinVal = filterHoraFin.value;
+
+    // ¿El usuario definió un rango personalizado (fecha y/o hora Desde/Hasta)?
+    const hayRangoPersonalizado = fechaInicioVal || horaInicioVal || fechaFinVal || horaFinVal;
+
+    if (hayRangoPersonalizado) {
+        // Se arman dos marcas de tiempo "YYYY-MM-DDTHH:MM" comparables como texto.
+        // Si falta la fecha de un extremo, se usa la fecha del otro extremo (o un límite muy amplio).
+        const fechaInicio = fechaInicioVal || fechaFinVal || '0000-01-01';
+        const horaInicio = horaInicioVal || '00:00';
+        const fechaFin = fechaFinVal || fechaInicioVal || '9999-12-31';
+        const horaFin = horaFinVal || '23:59';
+
+        const limiteInicio = `${fechaInicio}T${horaInicio}`;
+        const limiteFin = `${fechaFin}T${horaFin}`;
+
+        resultados = resultados.filter(r => {
+            if (!r.fecha) return false;
+            const horaRegistro = r.hora || '00:00';
+            const marcaRegistro = `${r.fecha}T${horaRegistro}`;
+            return marcaRegistro >= limiteInicio && marcaRegistro <= limiteFin;
+        });
     } else {
+        // Filtro rápido tradicional (solo cuando no hay rango personalizado)
         const rango = filterRango.value;
         const hoy = new Date();
-         
+
         if (rango === 'dia') {
             const hoyStr = hoy.toISOString().split('T')[0];
             resultados = resultados.filter(r => r.fecha === hoyStr);
@@ -527,6 +566,7 @@ function aplicarFiltros() {
             const anioActual = hoy.getFullYear().toString();
             resultados = resultados.filter(r => r.fecha && r.fecha.startsWith(anioActual));
         }
+        // rango === 'todos' -> no se aplica filtro de fecha
     }
 
     const maqFiltro = filterBus.value;
