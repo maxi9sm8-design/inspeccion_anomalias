@@ -195,6 +195,13 @@
             border: 1px solid #d0d7de;
         }
 
+        .filter-hint {
+            grid-column: 1 / -1;
+            margin: -5px 0 5px 0;
+            font-size: 12px;
+            color: #555;
+        }
+
         .filter-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -533,7 +540,7 @@
         <div class="filter-card">
             <div class="filter-grid">
                 <div>
-                    <label for="filterRango">Rango de Fecha:</label>
+                    <label for="filterRango">Rango rápido:</label>
                     <select id="filterRango">
                         <option value="todos">Todos los registros</option>
                         <option value="dia">Hoy (Día)</option>
@@ -543,15 +550,21 @@
                     </select>
                 </div>
 
+                <p class="filter-hint">Si completa cualquiera de los campos "Desde" / "Hasta" de más abajo, el rango rápido se ignora y manda el rango personalizado (fecha y hora exactas).</p>
+
                 <div>
-                    <label for="filterFechaEspecifica">O Fecha Específica:</label>
-                    <input type="date" id="filterFechaEspecifica">
+                    <label for="filterFechaInicio">Desde Fecha:</label>
+                    <input type="date" id="filterFechaInicio">
                 </div>
 
-                <!-- NUEVOS CAMPOS DE FILTRO POR HORA -->
                 <div>
                     <label for="filterHoraInicio">Desde Hora:</label>
                     <input type="time" id="filterHoraInicio">
+                </div>
+
+                <div>
+                    <label for="filterFechaFin">Hasta Fecha:</label>
+                    <input type="date" id="filterFechaFin">
                 </div>
 
                 <div>
